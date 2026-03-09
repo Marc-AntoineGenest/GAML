@@ -1,0 +1,20 @@
+# Core (always required)
+pandas>=2.0
+scikit-learn>=1.3
+numpy>=1.24
+
+# AutoML backend (primary — heavyweight, install separately)
+# autogluon.tabular>=1.0
+
+# Class imbalance (optional — graceful fallback to class_weight if absent)
+# imbalanced-learn>=0.12
+
+# Reporting
+mlflow>=2.10        # optional — degrades gracefully if absent
+
+# Optional data backends (future)
+# polars>=0.20
+# pyarrow>=14
+
+# Dev / testing
+pytest>=8.0

@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# AutoML outputs
+reports/
+mlflow_runs/
+mlruns/
+*.html
+run_*.json
+
+# Data
+*.csv
+*.parquet
+*.xlsx
+*.xls
+data/
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
+.env

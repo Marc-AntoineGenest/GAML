@@ -1,0 +1,50 @@
+{
+  "best": {
+    "id": "aad2f95e",
+    "genes": {
+      "correlation_threshold": 0.95,
+      "numeric_imputer": "mean",
+      "outlier_method": "none",
+      "outlier_threshold": 1.5,
+      "outlier_action": "clip",
+      "distribution_transform": "box-cox",
+      "missing_indicator": true,
+      "scaler": "none",
+      "categorical_encoder": "target",
+      "feature_selection_method": "none",
+      "feature_selection_k": 1.0,
+      "imbalance_method": "smote",
+      "n_estimators": 500,
+      "max_depth": 3,
+      "learning_rate": 0.01
+    },
+    "fitness": -3643.053828744279,
+    "generation": 2,
+    "parent_ids": [
+      "3817aa04"
+    ]
+  },
+  "generations": [
+    {
+      "generation": 0,
+      "best_fitness": -3660.2287583481425,
+      "mean_fitness": -3937.5759590958423,
+      "worst_fitness": -4458.967218256333,
+      "elapsed_seconds": 12.10131060006097
+    },
+    {
+      "generation": 1,
+      "best_fitness": -3660.2287583481425,
+      "mean_fitness": -3958.259562553468,
+      "worst_fitness": -4407.334898494381,
+      "elapsed_seconds": 9.875079200020991
+    },
+    {
+      "generation": 2,
+      "best_fitness": -3643.053828744279,
+      "mean_fitness": -3750.1631422270907,
+      "worst_fitness": -4093.715355320768,
+      "elapsed_seconds": 13.475786899914965
+    }
+  ]
+}
