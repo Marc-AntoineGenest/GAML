@@ -1,0 +1,9 @@
+# VS Code
+/.vscode/
+
+# Python environment
+/.venv/
+
+# Tests and debugs
+/mlflow_runs/
+/reports/
