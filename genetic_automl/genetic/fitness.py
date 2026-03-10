@@ -41,21 +41,7 @@ from genetic_automl.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-# Genes that belong to the preprocessing layer (not forwarded to AutoML)
-_PREPROCESSING_GENE_KEYS_OLD = {  # kept for reference
-    "correlation_threshold",
-    "numeric_imputer",
-    "outlier_method",
-    "outlier_threshold",
-    "outlier_action",
-    "scaler",
-    "categorical_encoder",
-    "feature_selection_method",
-    "feature_selection_k",
-    "imbalance_method",
-}
-
-# Updated gene key set matching new pipeline order
+# Genes that belong to the preprocessing layer (not forwarded to the AutoML model)
 _PREPROCESSING_GENE_KEYS = {
     "numeric_imputer",
     "outlier_method",

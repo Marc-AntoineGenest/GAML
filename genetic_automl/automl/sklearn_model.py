@@ -1,12 +1,13 @@
 """
 Sklearn fallback backend.
 
-Uses a simple but solid pipeline:
-  - Preprocessing: median imputation + standard scaling (numeric),
-                   most-frequent imputation + one-hot encoding (categorical)
-  - Model: RandomForest or GradientBoosting depending on problem type
+B4 fix: the internal ColumnTransformer (imputer + scaler + one-hot encoder) has been
+removed. By the time data reaches SklearnModel it has already been fully preprocessed
+by PreprocessingPipeline (imputation, scaling, encoding, feature selection, etc.).
+Applying a second StandardScaler on top of already-scaled data biased the model away
+from what the GA evaluated during CV.
 
-No AutoGluon required. Useful for quick tests and CI.
+The model now wraps only the estimator — no internal preprocessing.
 """
 
 from __future__ import annotations
@@ -15,11 +16,7 @@ from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
-from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from genetic_automl.core.base_automl import BaseAutoML
 from genetic_automl.core.problem import ProblemType
@@ -30,7 +27,10 @@ log = get_logger(__name__)
 
 class SklearnModel(BaseAutoML):
     """
-    Lightweight sklearn-based AutoML fallback.
+    Lightweight sklearn GBM wrapper — no internal preprocessing.
+
+    All preprocessing (imputation, scaling, encoding, feature selection)
+    is handled upstream by PreprocessingPipeline before this class is called.
 
     Parameters
     ----------
@@ -39,7 +39,7 @@ class SklearnModel(BaseAutoML):
     max_depth : int
         Maximum tree depth.
     learning_rate : float
-        Shrinkage parameter (GBM only).
+        Shrinkage parameter.
     """
 
     def __init__(
@@ -57,35 +57,9 @@ class SklearnModel(BaseAutoML):
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.learning_rate = learning_rate
-        self._pipeline: Optional[Pipeline] = None
+        self._estimator = None
 
     # ------------------------------------------------------------------
-
-    def _build_preprocessor(self, X: pd.DataFrame) -> ColumnTransformer:
-        num_cols = X.select_dtypes(include="number").columns.tolist()
-        cat_cols = X.select_dtypes(exclude="number").columns.tolist()
-
-        numeric_transformer = Pipeline(
-            steps=[
-                ("imputer", SimpleImputer(strategy="median")),
-                ("scaler", StandardScaler()),
-            ]
-        )
-        categorical_transformer = Pipeline(
-            steps=[
-                ("imputer", SimpleImputer(strategy="most_frequent")),
-                (
-                    "onehot",
-                    OneHotEncoder(handle_unknown="ignore", sparse_output=False),
-                ),
-            ]
-        )
-        transformers = []
-        if num_cols:
-            transformers.append(("num", numeric_transformer, num_cols))
-        if cat_cols:
-            transformers.append(("cat", categorical_transformer, cat_cols))
-        return ColumnTransformer(transformers=transformers, remainder="drop")
 
     def _build_estimator(self):
         if self.problem_type in (
@@ -115,17 +89,16 @@ class SklearnModel(BaseAutoML):
         y_val: Optional[pd.Series] = None,
     ) -> "SklearnModel":
         log.info(
-            "SklearnModel fit | estimators=%d | depth=%d",
+            "SklearnModel fit | estimators=%d | depth=%d | samples=%d | features=%d",
             self.n_estimators,
             self.max_depth,
+            len(y_train),
+            X_train.shape[1],
         )
         start = self._start_timer()
-        preprocessor = self._build_preprocessor(X_train)
-        estimator = self._build_estimator()
-        self._pipeline = Pipeline(
-            steps=[("preprocessor", preprocessor), ("estimator", estimator)]
-        )
-        self._pipeline.fit(X_train, y_train)
+        self._estimator = self._build_estimator()
+        # Data already preprocessed upstream — fit estimator directly
+        self._estimator.fit(X_train.values, y_train.values)
         elapsed = self._stop_timer(start)
         self._is_fitted = True
         log.info("SklearnModel fit complete in %.2fs", elapsed)
@@ -133,14 +106,14 @@ class SklearnModel(BaseAutoML):
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         self._check_fitted()
-        return self._pipeline.predict(X)
+        return self._estimator.predict(X.values)
 
     def predict_proba(self, X: pd.DataFrame) -> Optional[np.ndarray]:
         self._check_fitted()
         if self.problem_type == ProblemType.REGRESSION:
             return None
-        if hasattr(self._pipeline, "predict_proba"):
-            return self._pipeline.predict_proba(X)
+        if hasattr(self._estimator, "predict_proba"):
+            return self._estimator.predict_proba(X.values)
         return None
 
     def get_params(self) -> dict:
@@ -154,3 +127,4 @@ class SklearnModel(BaseAutoML):
             }
         )
         return base
+

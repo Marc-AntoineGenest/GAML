@@ -60,6 +60,7 @@ class OutlierHandler:
         self._bounds: Dict[str, Tuple[float, float]] = {}   # col → (lower, upper)
         self._means: Dict[str, float] = {}
         self._stds: Dict[str, float] = {}
+        self._medians: Dict[str, float] = {}  # B6: stored at fit time for IsolationForest clip
         self._iso_forest = None
 
     # ------------------------------------------------------------------
@@ -95,6 +96,10 @@ class OutlierHandler:
                 n_jobs=-1,
             )
             self._iso_forest.fit(X[self._num_cols].fillna(0))
+            # B6 fix: store per-column training medians so transform() never
+            # computes statistics from val/test data (which would be leakage).
+            for col in self._num_cols:
+                self._medians[col] = float(X[col].median())
 
         n_outliers = self._count_outliers(X)
         log.info(
@@ -129,13 +134,13 @@ class OutlierHandler:
             if self.action == "flag":
                 X["__outlier__"] = (preds == -1).astype(int)
             else:
-                # clip: for detected outlier rows, clip each feature to its IQR bounds
-                # (compute simple bounds on-the-fly using training bounds if available,
-                #  else just replace with column median)
+                # clip: replace outlier-row values with the training median.
+                # B6 fix: use self._medians (stored at fit time) — never compute
+                # statistics from the current batch (val/test), which is leakage.
                 outlier_mask = preds == -1
                 for col in cols_present:
-                    col_median = X[col].median()
-                    X.loc[outlier_mask, col] = X.loc[outlier_mask, col].fillna(col_median)
+                    train_median = self._medians.get(col, 0.0)
+                    X.loc[outlier_mask, col] = train_median
 
         return X
 

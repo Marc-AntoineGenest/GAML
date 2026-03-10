@@ -94,12 +94,21 @@ class CategoricalEncoder:
             self._ohe_cols = list(self._encoder.get_feature_names_out(self._cat_cols))
 
         elif self.strategy == "ordinal":
+            # B8 fix: unknown_value=-1 mapped unseen categories to a value below index 0,
+            # which distance-based models (KNN, SVM, linear) interpret as a phantom
+            # category "less than all known ones". Use NaN as the sentinel and then fill
+            # with the mean ordinal index (mid-range), which is a neutral, non-misleading
+            # imputation for an unknown category.
             self._encoder = OrdinalEncoder(
                 handle_unknown="use_encoded_value",
-                unknown_value=-1,
+                unknown_value=np.nan,   # B8: NaN sentinel — filled post-transform
                 dtype=np.float32,
             )
             self._encoder.fit(X_cat)
+            # Store per-column mean ordinal index for neutral fill
+            self._ordinal_fill: Dict[str, float] = {}
+            for col, cats in zip(self._cat_cols, self._encoder.categories_):
+                self._ordinal_fill[col] = float(len(cats) - 1) / 2.0
 
         elif self.strategy == "target":
             if y is None:
@@ -131,6 +140,11 @@ class CategoricalEncoder:
         elif self.strategy == "ordinal":
             encoded = self._encoder.transform(X_cat)
             enc_df = pd.DataFrame(encoded, columns=cat_cols_present, index=X.index)
+            # B8 fix: fill NaN sentinels (unseen categories) with the neutral
+            # per-column mid-range ordinal value stored at fit time.
+            for col in cat_cols_present:
+                fill_val = getattr(self, "_ordinal_fill", {}).get(col, 0.0)
+                enc_df[col] = enc_df[col].fillna(fill_val)
             return pd.concat([non_cat, enc_df], axis=1)
 
         elif self.strategy == "target":

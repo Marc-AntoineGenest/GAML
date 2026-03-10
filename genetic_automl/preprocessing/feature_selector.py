@@ -129,7 +129,23 @@ class FeatureSelector:
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         if not self._selected_cols:
             return X
+
         cols_present = [c for c in self._selected_cols if c in X.columns]
+        cols_missing = [c for c in self._selected_cols if c not in X.columns]
+
+        # B7 fix: never silently return fewer columns than selected at fit time.
+        # Missing columns at transform time indicate a schema mismatch — almost always
+        # a bug (e.g. a column dropped by an upstream step that wasn't during training).
+        # Raise a clear error so the problem is visible immediately.
+        if cols_missing:
+            raise ValueError(
+                f"FeatureSelector.transform(): {len(cols_missing)} selected column(s) are "
+                f"missing from the input DataFrame: {cols_missing}. "
+                f"This usually means an upstream preprocessing step (e.g. CorrelationFilter) "
+                f"behaved differently at transform time than at fit time. "
+                f"Columns present: {list(X.columns)}"
+            )
+
         return X[cols_present]
 
     def fit_transform(self, X: pd.DataFrame, y: pd.Series = None) -> pd.DataFrame:

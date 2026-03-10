@@ -33,34 +33,34 @@ class GeneDefinition:
 # ---------------------------------------------------------------------------
 
 PREPROCESSING_GENES: List[GeneDefinition] = [
-    # Step 1: Correlation filter
+    # Step 1: Correlation filter (reduces dimensionality first — cheaper subsequent steps)
     GeneDefinition("correlation_threshold", [None, 0.85, 0.90, 0.95]),
 
-    # Step 2: Numeric imputation
+    # Step 2: Numeric imputation (MUST be first — NaN breaks IQR/IsolationForest)
     GeneDefinition("numeric_imputer", ["mean", "median", "knn", "iterative", "constant"]),
 
-    # Step 3: Outlier handling
+    # Step 3: Outlier handling (on clean numeric data, before scaling distorts distances)
     GeneDefinition("outlier_method", ["none", "iqr", "zscore", "isolation_forest"]),
     GeneDefinition("outlier_threshold", [1.5, 2.0, 3.0]),
     GeneDefinition("outlier_action", ["clip", "flag"]),
 
-    # Step 5: Distribution transform (NEW)
-    GeneDefinition("distribution_transform", ["none", "yeo-johnson", "box-cox", "log1p"]),
-
-    # Step 7: Missing indicator (NEW)
-    GeneDefinition("missing_indicator", [True, False]),
-
-    # Step 6: Scaling
-    GeneDefinition("scaler", ["none", "standard", "minmax", "robust"]),
-
-    # Step 5: Categorical encoding
+    # Step 4: Categorical encoding (encode before scaling — scaling strings is nonsensical)
     GeneDefinition("categorical_encoder", ["onehot", "ordinal", "target", "binary"]),
 
-    # Step 6: Feature selection
+    # Step 5: Distribution transform (normalize skewness before scaling)
+    GeneDefinition("distribution_transform", ["none", "yeo-johnson", "box-cox", "log1p"]),
+
+    # Step 6: Scaling (after all columns are numeric and distributions are shaped)
+    GeneDefinition("scaler", ["none", "standard", "minmax", "robust"]),
+
+    # Step 7: Missing indicator (binary flags — added after imputation, signals missingness)
+    GeneDefinition("missing_indicator", [True, False]),
+
+    # Step 8: Feature selection (on fully preprocessed data)
     GeneDefinition("feature_selection_method", ["none", "variance_threshold", "mutual_info", "rfe"]),
     GeneDefinition("feature_selection_k", [0.5, 0.75, 1.0]),
 
-    # Step 7: Imbalance handling
+    # Step 9: Imbalance handling (ALWAYS LAST — train only, after final feature matrix is ready)
     GeneDefinition("imbalance_method", ["none", "smote", "borderline_smote", "adasyn", "class_weight"]),
 ]
 

@@ -36,7 +36,6 @@ Combined gen-0 composition:
 
 from __future__ import annotations
 
-import copy
 import random
 from typing import Any, Dict, List, Optional
 
@@ -264,20 +263,37 @@ class WarmStart:
         y_train: pd.Series,
     ) -> List[Chromosome]:
         """
-        Evaluate n_pool random chromosomes with a 1-fold fast eval,
-        return the top n_keep survivors.
-        """
-        from genetic_automl.genetic.fitness import FitnessEvaluator
+        Evaluate n_pool random chromosomes cheaply, return the top n_keep survivors.
 
-        # Build a cheap 1-fold evaluator
-        fast_evaluator = FitnessEvaluator(
-            problem_type=evaluator.problem_type,
-            target_column=evaluator.target_column,
-            backend=evaluator.backend,
-            metric=evaluator.metric,
-            n_folds=1,                 # single fold — fast
-            random_seed=evaluator.random_seed,
-        )
+        B5 fix: the original implementation used FitnessEvaluator(n_folds=1), which
+        causes StratifiedKFold(n_splits=1) to raise ValueError — silently making every
+        candidate score -inf and returning zero survivors (strategy B completely broken).
+
+        Fix: use a single 80/20 train_test_split instead of k-fold CV. This is fast
+        (one fit per chromosome) and still data-driven without crashing.
+        """
+        from sklearn.model_selection import train_test_split as _tts
+        from genetic_automl.core.problem import fitness_sign, compute_metric
+        from genetic_automl.preprocessing.pipeline import PreprocessingConfig, PreprocessingPipeline
+        from genetic_automl.automl import build_automl
+        from genetic_automl.genetic.fitness import _split_genes
+
+        # Single 80/20 split — cheap but data-driven
+        stratify = y_train if evaluator.problem_type.value == "classification" else None
+        try:
+            X_tr, X_hld, y_tr, y_hld = _tts(
+                X_train, y_train,
+                test_size=0.20,
+                random_state=self.random_seed,
+                stratify=stratify,
+            )
+        except Exception:
+            # Stratify can fail on tiny datasets; retry without
+            X_tr, X_hld, y_tr, y_hld = _tts(
+                X_train, y_train,
+                test_size=0.20,
+                random_state=self.random_seed,
+            )
 
         pool = random_population(
             backend=self.backend,
@@ -286,16 +302,47 @@ class WarmStart:
             generation=0,
         )
 
-        log.info("WarmStart halving: evaluating %d candidates (1-fold fast)…", n_pool)
+        sign = fitness_sign(evaluator.metric)
+        log.info("WarmStart halving: evaluating %d candidates (1-split fast)…", n_pool)
+
         for chrom in pool:
-            fast_evaluator.evaluate(chrom, X_train, y_train)
+            try:
+                pp_genes, model_genes = _split_genes(chrom.genes)
+                pp_cfg = PreprocessingConfig.from_genes(pp_genes)
+                pp = PreprocessingPipeline(
+                    config=pp_cfg,
+                    problem_type=evaluator.problem_type,
+                    random_seed=self.random_seed,
+                )
+                X_tr_pp, y_tr_pp = pp.fit_transform_train(X_tr, y_tr)
+                X_hld_pp = pp.transform(X_hld)
+
+                model = build_automl(
+                    backend=evaluator.backend,
+                    problem_type=evaluator.problem_type,
+                    target_column=evaluator.target_column,
+                    random_seed=self.random_seed,
+                    **{k: v for k, v in model_genes.items() if v is not None},
+                )
+                model.fit(X_tr_pp, y_tr_pp)
+                raw = compute_metric(evaluator.metric, y_hld.values, model.predict(X_hld_pp))
+                chrom.fitness = sign * raw
+            except Exception as exc:
+                log.debug("WarmStart halving: candidate failed (%s)", exc)
+                chrom.fitness = float("-inf")
 
         # Sort by fitness, keep top n_keep
         evaluated = [c for c in pool if c.fitness is not None and c.fitness != float("-inf")]
         evaluated.sort(key=lambda c: c.fitness, reverse=True)
         survivors = evaluated[:n_keep]
 
-        # Reset fitness so they get re-evaluated properly in the GA loop
+        log.info(
+            "WarmStart halving: %d/%d candidates survived (best fitness=%.4f)",
+            len(survivors), n_pool,
+            survivors[0].fitness if survivors else float("nan"),
+        )
+
+        # Reset fitness so they get properly re-evaluated in the GA loop
         for s in survivors:
             s.fitness = None
 

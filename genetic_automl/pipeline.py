@@ -105,9 +105,11 @@ class AutoMLPipeline:
         validated = self._data_manager.validate(train_df)
         train_split, val_split, test_split = self._data_manager.three_way_split(validated, test_df)
 
-        # GA evolves on train_split using k-fold CV — test_split is NEVER touched here
+        # GA evolves on train_split using k-fold CV — val_split and test_split are NEVER touched here
         X_train = self._data_manager.features(train_split)
         y_train = self._data_manager.labels(train_split)
+        X_val   = self._data_manager.features(val_split)   # B2: used in final refit only
+        y_val   = self._data_manager.labels(val_split)
         X_test  = self._data_manager.features(test_split)
         y_test  = self._data_manager.labels(test_split)
 
@@ -129,8 +131,13 @@ class AutoMLPipeline:
         best_chrom = engine.run(X_train, y_train)
         self._history = engine.history
 
-        # ── 3. Refit best preprocessing on full training split ────────
-        log.info("Refitting best preprocessing config on full training split…")
+        # ── 3. Refit best preprocessing on train + val (all non-test data) ──
+        # B2 fix: val_split is no longer discarded — we combine train+val so the
+        # final model trains on all available data that the GA never saw as a held-out set.
+        log.info("Refitting best preprocessing config on train + val split…")
+        X_dev = pd.concat([X_train, X_val], ignore_index=True)
+        y_dev = pd.concat([y_train, y_val], ignore_index=True)
+
         pp_genes, model_genes = _split_genes(best_chrom.genes)
         pp_config = PreprocessingConfig.from_genes(pp_genes)
         self._best_preprocessor = PreprocessingPipeline(
@@ -138,11 +145,13 @@ class AutoMLPipeline:
             problem_type=cfg.problem_type,
             random_seed=cfg.genetic.random_seed,
         )
-        X_train_pp, y_train_pp = self._best_preprocessor.fit_transform_train(X_train, y_train)
+        X_dev_pp, y_dev_pp = self._best_preprocessor.fit_transform_train(X_dev, y_dev)
         X_test_pp = self._best_preprocessor.transform(X_test)
 
-        # ── 4. Retrain best model on preprocessed full training set ───
-        log.info("Retraining best model config on preprocessed training data…")
+        # ── 4. Retrain best model on preprocessed train+val set ──────
+        # B1 fix: test data is NEVER passed to model.fit() — AutoGluon uses val
+        # for early stopping/tuning_data which would leak the test set.
+        log.info("Retraining best model config on preprocessed train+val data…")
         self._best_model = build_automl(
             backend=cfg.automl.backend,
             problem_type=cfg.problem_type,
@@ -151,7 +160,8 @@ class AutoMLPipeline:
             time_limit=cfg.automl.time_limit_per_eval * 2,
             **{k: v for k, v in model_genes.items() if v is not None},
         )
-        self._best_model.fit(X_train_pp, y_train_pp, X_test_pp, y_test)
+        # B1: pass None, None — no val set for final refit (test must stay locked)
+        self._best_model.fit(X_dev_pp, y_dev_pp, None, None)
 
         # ── 5. Final score on preprocessed test set ───────────────────
         raw = self._best_model.score(X_test_pp, y_test, metric=self._metric_name)

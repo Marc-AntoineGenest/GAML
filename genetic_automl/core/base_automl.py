@@ -87,12 +87,41 @@ class BaseAutoML(ABC):
         y: pd.Series,
         metric: Optional[str] = None,
     ) -> float:
-        """Evaluate the model on *X* / *y* using *metric*."""
+        """Evaluate the model on *X* / *y* using *metric*.
+
+        B3 fix: roc_auc requires probability scores, not hard labels.
+        For probability-based metrics we call predict_proba(); for all
+        others we call predict() as before.
+        """
         self._check_fitted()
         if metric is None:
             metric = get_default_metric(self.problem_type)
-        y_pred = self.predict(X)
-        value = compute_metric(metric, y.values, y_pred)
+
+        # Metrics that require probability scores rather than hard labels
+        _PROBA_METRICS = {"roc_auc"}
+
+        if metric in _PROBA_METRICS:
+            proba = self.predict_proba(X)
+            if proba is None:
+                # Backend doesn't support probabilities — fall back to hard labels
+                log.warning(
+                    "score: metric '%s' requires predict_proba but backend returned None; "
+                    "falling back to hard-label predictions (score may be inaccurate).",
+                    metric,
+                )
+                y_input = self.predict(X)
+            else:
+                # Binary: roc_auc_score expects 1-D positive-class proba
+                # Multiclass: roc_auc_score(multi_class='ovr') expects (N, C) array
+                import numpy as np
+                if proba.ndim == 2 and proba.shape[1] == 2:
+                    y_input = proba[:, 1]   # binary → positive class probability
+                else:
+                    y_input = proba         # multiclass → full probability matrix
+        else:
+            y_input = self.predict(X)
+
+        value = compute_metric(metric, y.values, y_input)
         log.debug("score | metric=%s | value=%.6f", metric, value)
         return value
 
