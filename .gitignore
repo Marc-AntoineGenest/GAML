@@ -1,9 +1,9 @@
 # VS Code
-/.vscode/
+.vscode/
 
 # Python environment
-/.venv/
+.venv/
 
 # Tests and debugs
-/mlflow_runs/
-/reports/
+mlflow_runs/
+reports/
