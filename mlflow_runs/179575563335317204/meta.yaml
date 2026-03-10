@@ -1,7 +1,0 @@
-artifact_location: file:C:/Users/15793/Documents/Projets/GAML/mlflow_runs/179575563335317204
-creation_time: 1773096528400
-experiment_id: '179575563335317204'
-last_update_time: 1773096528400
-lifecycle_stage: active
-name: breast_cancer_clf
-workspace: default
