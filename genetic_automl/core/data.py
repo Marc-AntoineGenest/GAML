@@ -10,7 +10,7 @@ Full data
 └── Dev set (1 - test_size %)
     ├── Train set (1 - val_size % of dev)   — chromosome preprocessing fit + model fit
     └── Val set   (val_size % of dev)       — k-fold CV splits (if using CV fitness)
-                                             OR single val split (legacy mode)
+                                             or single val split
 
 The key invariant:
   GA fitness is measured on val (via CV on train+val).
@@ -45,7 +45,7 @@ class DataManager:
         Fraction of total data locked for final test evaluation (default 0.15).
     val_size : float
         Fraction of remaining dev data used as val during GA evolution (default 0.2).
-        Only relevant when NOT using k-fold CV fitness (legacy mode).
+        Only relevant when not using k-fold CV fitness.
     stratify : bool
         Stratify splits on the label column (classification only).
     random_seed : int
@@ -151,7 +151,7 @@ class DataManager:
         df: pd.DataFrame,
         test_df: Optional[pd.DataFrame] = None,
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """Legacy 2-way split. Returns (train, test). Val is carved from train."""
+        """2-way split alias. Returns (train, test). Val is carved from train."""
         train, _val, test = self.three_way_split(df, test_df)
         return train, test
 

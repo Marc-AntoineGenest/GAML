@@ -2,9 +2,9 @@
 BaseAutoML — abstract contract every AutoML backend must implement.
 
 Adding a new backend:
-1. Subclass BaseAutoML
-2. Implement fit(), predict(), predict_proba() (optional), score()
-3. Register it in automl/__init__.py
+  1. Subclass BaseAutoML
+  2. Implement fit(), predict(), and optionally predict_proba()
+  3. Register it in automl/__init__.py
 """
 
 from __future__ import annotations
@@ -24,12 +24,11 @@ log = get_logger(__name__)
 
 class BaseAutoML(ABC):
     """
-    Abstract base class for AutoML backends.
+    Abstract base for AutoML backends.
 
-    Every implementation must provide at minimum:
-        fit(X_train, y_train, **kwargs)
-        predict(X) -> np.ndarray
-        score(X, y, metric=None) -> float
+    Subclasses must implement fit(), predict().
+    predict_proba() is optional — returns None by default.
+    score() is concrete and routes probability-based metrics through predict_proba().
     """
 
     def __init__(
@@ -71,14 +70,11 @@ class BaseAutoML(ABC):
         ...
 
     def predict_proba(self, X: pd.DataFrame) -> Optional[np.ndarray]:
-        """
-        Return class probabilities. Not mandatory; returns None by default.
-        Override for classification backends that support it.
-        """
+        """Return class probabilities. Returns None by default."""
         return None
 
     # ------------------------------------------------------------------
-    # Scoring (concrete — calls predict + metric registry)
+    # Scoring
     # ------------------------------------------------------------------
 
     def score(
@@ -87,37 +83,28 @@ class BaseAutoML(ABC):
         y: pd.Series,
         metric: Optional[str] = None,
     ) -> float:
-        """Evaluate the model on *X* / *y* using *metric*.
+        """Evaluate on X / y using the given metric.
 
-        B3 fix: roc_auc requires probability scores, not hard labels.
-        For probability-based metrics we call predict_proba(); for all
-        others we call predict() as before.
+        Probability-based metrics (roc_auc) route through predict_proba().
+        All others use predict().
         """
         self._check_fitted()
         if metric is None:
             metric = get_default_metric(self.problem_type)
 
-        # Metrics that require probability scores rather than hard labels
-        _PROBA_METRICS = {"roc_auc"}
-
-        if metric in _PROBA_METRICS:
+        if metric in {"roc_auc"}:
             proba = self.predict_proba(X)
             if proba is None:
-                # Backend doesn't support probabilities — fall back to hard labels
                 log.warning(
-                    "score: metric '%s' requires predict_proba but backend returned None; "
-                    "falling back to hard-label predictions (score may be inaccurate).",
+                    "metric '%s' requires predict_proba but backend returned None; "
+                    "falling back to hard-label predictions.",
                     metric,
                 )
                 y_input = self.predict(X)
+            elif proba.ndim == 2 and proba.shape[1] == 2:
+                y_input = proba[:, 1]   # binary: use positive-class probability
             else:
-                # Binary: roc_auc_score expects 1-D positive-class proba
-                # Multiclass: roc_auc_score(multi_class='ovr') expects (N, C) array
-                import numpy as np
-                if proba.ndim == 2 and proba.shape[1] == 2:
-                    y_input = proba[:, 1]   # binary → positive class probability
-                else:
-                    y_input = proba         # multiclass → full probability matrix
+                y_input = proba         # multiclass: full (N, C) matrix
         else:
             y_input = self.predict(X)
 
@@ -145,13 +132,8 @@ class BaseAutoML(ABC):
         return time.perf_counter()
 
     def _stop_timer(self, start: float) -> float:
-        elapsed = time.perf_counter() - start
-        self._fit_duration = elapsed
-        return elapsed
-
-    # ------------------------------------------------------------------
-    # Serialization hooks (optional override)
-    # ------------------------------------------------------------------
+        self._fit_duration = time.perf_counter() - start
+        return self._fit_duration
 
     def get_params(self) -> Dict[str, Any]:
         """Return hyper-parameters for logging / chromosome encoding."""
@@ -163,8 +145,4 @@ class BaseAutoML(ABC):
         }
 
     def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"problem={self.problem_type.value}, "
-            f"fitted={self._is_fitted})"
-        )
+        return f"{self.__class__.__name__}(problem={self.problem_type.value}, fitted={self._is_fitted})"

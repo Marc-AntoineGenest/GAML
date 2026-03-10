@@ -102,18 +102,16 @@ class TestCategoricalEncoder:
         X_out = enc.fit_transform(X)
         assert X_out.shape[1] == 3
 
-    def test_ordinal_unseen_not_negative_one(self):
-        """BUG B8: unseen categories should not map to -1."""
+    def test_ordinal_unseen_maps_to_midrange(self):
+        """Unseen categories should map to the per-column mid-range ordinal index."""
         X_train = pd.DataFrame({"cat": ["A", "B", "C"]})
         X_val = pd.DataFrame({"cat": ["A", "D"]})  # D unseen
         enc = CategoricalEncoder("ordinal")
         enc.fit(X_train)
         X_out = enc.transform(X_val)
-        # -1 causes silent corruption in distance-based models
-        # This test documents the known bug — should be 0 or global mean
-        unseen_val = X_out["cat"].iloc[1]
-        # TODO: fix BUG B8 — change -1 to 0
-        assert unseen_val == -1  # currently fails after fix
+        # A→0, B→1, C→2  →  mid-range = (3-1)/2 = 1.0
+        assert X_out["cat"].iloc[1] >= 0, "unseen category should not produce negative index"
+        assert X_out["cat"].iloc[0] == pytest.approx(0.0)  # known category A → index 0
 
     def test_no_nan_after_transform(self):
         X_train = pd.DataFrame({"cat": ["A", "B", "A"]})
@@ -189,17 +187,16 @@ class TestFeatureSelector:
         X_out = fs.fit_transform(X, y)
         assert X_out.shape[1] == 5
 
-    def test_transform_missing_col_warns_not_crashes(self):
-        """BUG B7: should warn, not silently return empty DataFrame."""
+    def test_transform_missing_col_raises(self):
+        """Column mismatch at transform time should raise a clear ValueError."""
         rng = np.random.default_rng(0)
         X_train = pd.DataFrame(rng.standard_normal((100, 3)), columns=["a", "b", "c"])
         y = pd.Series(rng.integers(0, 2, 100))
         fs = FeatureSelector("mutual_info", keep_k=1.0)
         fs.fit(X_train, y)
         X_val = pd.DataFrame(rng.standard_normal((10, 2)), columns=["a", "b"])  # c missing
-        X_out = fs.transform(X_val)
-        # Should return whatever columns are available, not silently drop to 0
-        assert X_out.shape[1] >= 1
+        with pytest.raises(ValueError, match="missing from input"):
+            fs.transform(X_val)
 
 
 # ---------------------------------------------------------------------------

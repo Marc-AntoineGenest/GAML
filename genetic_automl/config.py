@@ -104,7 +104,7 @@ class DataConfig:
     """Fraction of total data locked as final test set (never touches GA loop)."""
 
     val_size: float = 0.2
-    """Fraction of remaining dev data used as validation split (legacy/reference only; GA uses k-fold CV)."""
+    """Fraction of dev data used as validation in final refit. GA itself uses k-fold CV."""
 
     stratify: bool = True
     """Stratify train/test split on the label (classification only)."""

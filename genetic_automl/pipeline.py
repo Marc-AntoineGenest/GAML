@@ -1,20 +1,14 @@
 """
 AutoMLPipeline — top-level entry point.
 
-Full execution flow:
-  1. DataManager.validate() + split()  →  train / val / test
-  2. GeneticEngine.run()               →  evolve preprocessing + model config
-     └─ Each chromosome evaluation:
-          a. PreprocessingPipeline.fit_transform_train(X_train)
-          b. PreprocessingPipeline.transform(X_val)
-          c. AutoMLModel.fit(X_train_pp, y_train_pp)
-          d. AutoMLModel.score(X_val_pp, y_val)   → fitness
-  3. Best chromosome selected
-  4. PreprocessingPipeline refit on full training split (best config)
-  5. AutoMLModel retrained on preprocessed full training split
-  6. Final evaluation on preprocessed test set
-  7. MLflow logging + JSON export
-  8. HTML report generation
+Execution flow:
+  1. DataManager.validate() + three_way_split()  →  train / val / test
+  2. GeneticEngine.run()  →  evolve preprocessing + model config via k-fold CV
+  3. Refit best preprocessor on train + val
+  4. Retrain best model on preprocessed train + val
+  5. Final evaluation on test set
+  6. MLflow logging + JSON export
+  7. HTML report generation
 """
 
 from __future__ import annotations
@@ -55,7 +49,6 @@ class AutoMLPipeline:
     pipeline.fit(train_df)
     predictions = pipeline.predict(test_df)
     score = pipeline.score(test_df)
-    print(pipeline.report_path)
     """
 
     def __init__(self, config: PipelineConfig) -> None:
@@ -85,7 +78,7 @@ class AutoMLPipeline:
         train_df : pd.DataFrame
             Training data including the target column.
         test_df : pd.DataFrame | None
-            Optional explicit hold-out set. If None, a random split is used.
+            Optional hold-out set. If None, carved from train_df automatically.
         """
         cfg = self.config
         t0 = time.perf_counter()
@@ -105,15 +98,14 @@ class AutoMLPipeline:
         validated = self._data_manager.validate(train_df)
         train_split, val_split, test_split = self._data_manager.three_way_split(validated, test_df)
 
-        # GA evolves on train_split using k-fold CV — val_split and test_split are NEVER touched here
         X_train = self._data_manager.features(train_split)
         y_train = self._data_manager.labels(train_split)
-        X_val   = self._data_manager.features(val_split)   # B2: used in final refit only
+        X_val   = self._data_manager.features(val_split)
         y_val   = self._data_manager.labels(val_split)
         X_test  = self._data_manager.features(test_split)
         y_test  = self._data_manager.labels(test_split)
 
-        # ── 2. Genetic search ─────────────────────────────────────────
+        # ── 2. Genetic search (k-fold CV on X_train only) ─────────────
         evaluator = FitnessEvaluator(
             problem_type=cfg.problem_type,
             target_column=cfg.target_column,
@@ -127,14 +119,11 @@ class AutoMLPipeline:
             evaluator=evaluator,
             backend=cfg.automl.backend,
         )
-        # GA uses k-fold CV on X_train only — X_test is never passed in
         best_chrom = engine.run(X_train, y_train)
         self._history = engine.history
 
-        # ── 3. Refit best preprocessing on train + val (all non-test data) ──
-        # B2 fix: val_split is no longer discarded — we combine train+val so the
-        # final model trains on all available data that the GA never saw as a held-out set.
-        log.info("Refitting best preprocessing config on train + val split…")
+        # ── 3. Refit best preprocessing on train + val ────────────────
+        log.info("Refitting best preprocessing on train + val…")
         X_dev = pd.concat([X_train, X_val], ignore_index=True)
         y_dev = pd.concat([y_train, y_val], ignore_index=True)
 
@@ -148,10 +137,8 @@ class AutoMLPipeline:
         X_dev_pp, y_dev_pp = self._best_preprocessor.fit_transform_train(X_dev, y_dev)
         X_test_pp = self._best_preprocessor.transform(X_test)
 
-        # ── 4. Retrain best model on preprocessed train+val set ──────
-        # B1 fix: test data is NEVER passed to model.fit() — AutoGluon uses val
-        # for early stopping/tuning_data which would leak the test set.
-        log.info("Retraining best model config on preprocessed train+val data…")
+        # ── 4. Retrain best model on preprocessed train + val ─────────
+        log.info("Retraining best model on preprocessed train+val…")
         self._best_model = build_automl(
             backend=cfg.automl.backend,
             problem_type=cfg.problem_type,
@@ -160,15 +147,13 @@ class AutoMLPipeline:
             time_limit=cfg.automl.time_limit_per_eval * 2,
             **{k: v for k, v in model_genes.items() if v is not None},
         )
-        # B1: pass None, None — no val set for final refit (test must stay locked)
         self._best_model.fit(X_dev_pp, y_dev_pp, None, None)
 
-        # ── 5. Final score on preprocessed test set ───────────────────
-        raw = self._best_model.score(X_test_pp, y_test, metric=self._metric_name)
-        self._final_score = raw
+        # ── 5. Final evaluation on locked test set ────────────────────
+        self._final_score = self._best_model.score(X_test_pp, y_test, metric=self._metric_name)
         log.info(
             "Final test %s: %.6f | elapsed: %.1fs",
-            self._metric_name, raw, time.perf_counter() - t0,
+            self._metric_name, self._final_score, time.perf_counter() - t0,
         )
 
         # ── 6. MLflow logging ─────────────────────────────────────────
@@ -201,23 +186,20 @@ class AutoMLPipeline:
         """Preprocess then predict."""
         self._check_fitted()
         X = self._drop_target_if_present(df)
-        X_pp = self._best_preprocessor.transform(X)
-        return self._best_model.predict(X_pp)
+        return self._best_model.predict(self._best_preprocessor.transform(X))
 
     def predict_proba(self, df: pd.DataFrame) -> Optional[np.ndarray]:
         """Preprocess then predict class probabilities (classification only)."""
         self._check_fitted()
         X = self._drop_target_if_present(df)
-        X_pp = self._best_preprocessor.transform(X)
-        return self._best_model.predict_proba(X_pp)
+        return self._best_model.predict_proba(self._best_preprocessor.transform(X))
 
     def score(self, df: pd.DataFrame, metric: Optional[str] = None) -> float:
-        """Preprocess df then evaluate the final model."""
+        """Preprocess then evaluate the final model."""
         self._check_fitted()
         X = self._data_manager.features(df)
         y = self._data_manager.labels(df)
-        X_pp = self._best_preprocessor.transform(X)
-        return self._best_model.score(X_pp, y, metric=metric)
+        return self._best_model.score(self._best_preprocessor.transform(X), y, metric=metric)
 
     # ------------------------------------------------------------------
     # Properties

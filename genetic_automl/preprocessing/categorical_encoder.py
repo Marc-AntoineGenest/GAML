@@ -5,19 +5,12 @@ Encodes categorical (object / category dtype) columns.
 
 Strategies
 ----------
-onehot      : OneHotEncoder — creates binary dummy columns
-ordinal     : OrdinalEncoder — integer codes (preserves memory, good for trees)
-target      : Target encoding with cross-val (no leakage) — requires y on fit
-binary      : Binary encoding (category_encoders style, implemented here)
+onehot  : OneHotEncoder — binary dummy columns; unknown → all-zeros
+ordinal : OrdinalEncoder — integer codes; unknown → per-column mid-range index
+target  : Cross-validated target encoding (requires y at fit time)
+binary  : Bit-decomposition encoding
 
-Categorical columns with missing values are filled with '__MISSING__'
-before encoding.
-
-Unknown categories at transform time are handled gracefully:
-  - onehot : handle_unknown='ignore' → all zeros
-  - ordinal : unknown → -1
-  - target  : unknown → global mean
-  - binary  : unknown → all zeros
+Missing values are filled with '__MISSING__' before encoding.
 """
 
 from __future__ import annotations
@@ -41,8 +34,9 @@ class CategoricalEncoder:
     strategy : str
         'onehot' | 'ordinal' | 'target' | 'binary'
     handle_missing : str
-        'fill'  — replace NaN with '__MISSING__' (default)
-        'drop'  — drop rows with NaN categorical (not recommended)
+        'fill' — replace NaN with '__MISSING__' (default)
+    n_folds : int
+        Folds used for cross-validated target encoding.
     """
 
     def __init__(
@@ -57,56 +51,34 @@ class CategoricalEncoder:
 
         self._cat_cols: List[str] = []
         self._encoder = None
-        # target encoding: col → (category → mean target)
         self._target_map: Dict[str, Dict] = {}
         self._global_mean: float = 0.0
-        # binary: col → sorted categories list
         self._binary_cats: Dict[str, List] = {}
-        # onehot output column names (for transform alignment)
         self._ohe_cols: List[str] = []
-
-    # ------------------------------------------------------------------
+        self._ordinal_fill: Dict[str, float] = {}
 
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "CategoricalEncoder":
         self._cat_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
-
         if not self._cat_cols:
             log.info("CategoricalEncoder: no categorical columns found")
             return self
 
-        log.info(
-            "CategoricalEncoder(strategy=%s): %d categorical columns",
-            self.strategy,
-            len(self._cat_cols),
-        )
-
+        log.info("CategoricalEncoder(strategy=%s): %d columns", self.strategy, len(self._cat_cols))
         X_cat = self._fill_missing(X[self._cat_cols])
 
         if self.strategy == "onehot":
             from sklearn.preprocessing import OneHotEncoder
-            self._encoder = OneHotEncoder(
-                handle_unknown="ignore",
-                sparse_output=False,
-                dtype=np.float32,
-            )
+            self._encoder = OneHotEncoder(handle_unknown="ignore", sparse_output=False, dtype=np.float32)
             self._encoder.fit(X_cat)
-            # Pre-compute output column names
             self._ohe_cols = list(self._encoder.get_feature_names_out(self._cat_cols))
 
         elif self.strategy == "ordinal":
-            # B8 fix: unknown_value=-1 mapped unseen categories to a value below index 0,
-            # which distance-based models (KNN, SVM, linear) interpret as a phantom
-            # category "less than all known ones". Use NaN as the sentinel and then fill
-            # with the mean ordinal index (mid-range), which is a neutral, non-misleading
-            # imputation for an unknown category.
+            # Unknown categories use NaN sentinel, filled post-transform with the
+            # per-column mid-range index (neutral — avoids implying a rank order).
             self._encoder = OrdinalEncoder(
-                handle_unknown="use_encoded_value",
-                unknown_value=np.nan,   # B8: NaN sentinel — filled post-transform
-                dtype=np.float32,
+                handle_unknown="use_encoded_value", unknown_value=np.nan, dtype=np.float32,
             )
             self._encoder.fit(X_cat)
-            # Store per-column mean ordinal index for neutral fill
-            self._ordinal_fill: Dict[str, float] = {}
             for col, cats in zip(self._cat_cols, self._encoder.categories_):
                 self._ordinal_fill[col] = float(len(cats) - 1) / 2.0
 
@@ -118,58 +90,47 @@ class CategoricalEncoder:
 
         elif self.strategy == "binary":
             for col in self._cat_cols:
-                cats = sorted(X_cat[col].unique().tolist())
-                self._binary_cats[col] = cats
+                self._binary_cats[col] = sorted(X_cat[col].unique().tolist())
 
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         if not self._cat_cols:
             return X
-
         X = X.copy()
-        cat_cols_present = [c for c in self._cat_cols if c in X.columns]
-        X_cat = self._fill_missing(X[cat_cols_present])
-        non_cat = X.drop(columns=cat_cols_present)
+        cols = [c for c in self._cat_cols if c in X.columns]
+        X_cat = self._fill_missing(X[cols])
+        non_cat = X.drop(columns=cols)
 
         if self.strategy == "onehot":
-            encoded = self._encoder.transform(X_cat)
-            enc_df = pd.DataFrame(encoded, columns=self._ohe_cols, index=X.index)
+            enc_df = pd.DataFrame(
+                self._encoder.transform(X_cat), columns=self._ohe_cols, index=X.index
+            )
             return pd.concat([non_cat, enc_df], axis=1)
 
         elif self.strategy == "ordinal":
-            encoded = self._encoder.transform(X_cat)
-            enc_df = pd.DataFrame(encoded, columns=cat_cols_present, index=X.index)
-            # B8 fix: fill NaN sentinels (unseen categories) with the neutral
-            # per-column mid-range ordinal value stored at fit time.
-            for col in cat_cols_present:
-                fill_val = getattr(self, "_ordinal_fill", {}).get(col, 0.0)
-                enc_df[col] = enc_df[col].fillna(fill_val)
+            enc_df = pd.DataFrame(
+                self._encoder.transform(X_cat), columns=cols, index=X.index
+            )
+            for col in cols:
+                enc_df[col] = enc_df[col].fillna(self._ordinal_fill.get(col, 0.0))
             return pd.concat([non_cat, enc_df], axis=1)
 
         elif self.strategy == "target":
             enc_df = X_cat.copy()
-            for col in cat_cols_present:
-                mapping = self._target_map.get(col, {})
-                enc_df[col] = X_cat[col].map(mapping).fillna(self._global_mean)
+            for col in cols:
+                enc_df[col] = X_cat[col].map(self._target_map.get(col, {})).fillna(self._global_mean)
             return pd.concat([non_cat, enc_df], axis=1)
 
         elif self.strategy == "binary":
             parts = [non_cat]
-            for col in cat_cols_present:
+            for col in cols:
                 cats = self._binary_cats[col]
                 n_bits = max(1, int(np.ceil(np.log2(len(cats) + 1))))
                 cat_to_int = {c: i for i, c in enumerate(cats)}
-                int_codes = X_cat[col].map(cat_to_int).fillna(0).astype(int)
-                int_codes_arr = int_codes.to_numpy()
+                codes = X_cat[col].map(cat_to_int).fillna(0).astype(int).to_numpy()
                 for bit in range(n_bits):
-                    parts.append(
-                        pd.Series(
-                            ((int_codes_arr >> bit) & 1),
-                            index=X.index,
-                            name=f"{col}_bin{bit}",
-                        )
-                    )
+                    parts.append(pd.Series((codes >> bit) & 1, index=X.index, name=f"{col}_bin{bit}"))
             return pd.concat(parts, axis=1)
 
         return X
@@ -177,30 +138,15 @@ class CategoricalEncoder:
     def fit_transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> pd.DataFrame:
         return self.fit(X, y).transform(X)
 
-    # ------------------------------------------------------------------
-
     def _fill_missing(self, X_cat: pd.DataFrame) -> pd.DataFrame:
         return X_cat.fillna("__MISSING__").astype(str)
 
     def _fit_target_encoding(self, X_cat: pd.DataFrame, y: pd.Series) -> None:
-        """
-        Cross-validated target encoding to avoid leakage.
-        For each fold: fit mean on out-of-fold samples, apply to in-fold.
-        Final mapping = mean over all folds (global smoothed estimate).
-        """
+        """Cross-validated target encoding — no leakage."""
         kf = KFold(n_splits=self.n_folds, shuffle=True, random_state=42)
         for col in self._cat_cols:
-            # Collect per-fold category means
             fold_means: Dict = {}
-            for train_idx, val_idx in kf.split(X_cat):
-                train_cats = X_cat[col].iloc[train_idx]
-                train_y = y.iloc[train_idx]
-                col_mean = train_y.groupby(train_cats.values).mean().to_dict()
-                for cat, mean in col_mean.items():
-                    if cat not in fold_means:
-                        fold_means[cat] = []
-                    fold_means[cat].append(mean)
-            # Average across folds
-            self._target_map[col] = {
-                cat: np.mean(means) for cat, means in fold_means.items()
-            }
+            for train_idx, _ in kf.split(X_cat):
+                for cat, mean in y.iloc[train_idx].groupby(X_cat[col].iloc[train_idx].values).mean().items():
+                    fold_means.setdefault(cat, []).append(mean)
+            self._target_map[col] = {cat: np.mean(v) for cat, v in fold_means.items()}

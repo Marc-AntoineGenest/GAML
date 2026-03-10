@@ -6,18 +6,18 @@ Selects the most informative features after encoding + scaling.
 Methods
 -------
 none               : keep all features
-variance_threshold : drop features with variance below *threshold*
-mutual_info        : keep top-k features by mutual information with target
-rfe                : recursive feature elimination with a fast estimator
+variance_threshold : drop near-zero-variance features
+mutual_info        : keep top-k by mutual information with target
+rfe                : recursive feature elimination with ExtraTrees
 
-keep_k controls how many features to retain:
-  - If float in (0, 1]: fraction of original features
-  - If int > 1: absolute number
+keep_k controls retention:
+  float in (0, 1] → fraction of features
+  int > 1         → absolute count
 """
 
 from __future__ import annotations
 
-from typing import List, Optional, Union
+from typing import List, Union
 
 import numpy as np
 import pandas as pd
@@ -35,11 +35,10 @@ class FeatureSelector:
         'none' | 'variance_threshold' | 'mutual_info' | 'rfe'
     keep_k : float | int
         Fraction or absolute count of features to retain.
-        Ignored for 'variance_threshold' (uses *variance_threshold* param).
     variance_threshold : float
         Minimum variance for 'variance_threshold' method.
     problem_type_str : str
-        'classification' or 'regression' — affects mutual info function.
+        'classification' or 'regression'.
     random_seed : int
     """
 
@@ -59,8 +58,6 @@ class FeatureSelector:
 
         self._selected_cols: List[str] = []
         self._selector = None
-
-    # ------------------------------------------------------------------
 
     def fit(self, X: pd.DataFrame, y: pd.Series) -> "FeatureSelector":
         n_total = X.shape[1]
@@ -84,15 +81,8 @@ class FeatureSelector:
                 self._selected_cols = list(X.columns)
 
         elif self.method == "mutual_info":
-            from sklearn.feature_selection import (
-                mutual_info_classif,
-                mutual_info_regression,
-            )
-            fn = (
-                mutual_info_classif
-                if self.problem_type_str == "classification"
-                else mutual_info_regression
-            )
+            from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
+            fn = mutual_info_classif if self.problem_type_str == "classification" else mutual_info_regression
             try:
                 scores = fn(X.fillna(0), y, random_state=self.random_seed)
                 top_idx = np.argsort(scores)[::-1][:k]
@@ -118,35 +108,21 @@ class FeatureSelector:
                 log.warning("RFE failed: %s — keeping all", e)
                 self._selected_cols = list(X.columns)
 
-        log.info(
-            "FeatureSelector(method=%s): %d → %d features",
-            self.method,
-            n_total,
-            len(self._selected_cols),
-        )
+        log.info("FeatureSelector(method=%s): %d → %d features", self.method, n_total, len(self._selected_cols))
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         if not self._selected_cols:
             return X
 
-        cols_present = [c for c in self._selected_cols if c in X.columns]
-        cols_missing = [c for c in self._selected_cols if c not in X.columns]
-
-        # B7 fix: never silently return fewer columns than selected at fit time.
-        # Missing columns at transform time indicate a schema mismatch — almost always
-        # a bug (e.g. a column dropped by an upstream step that wasn't during training).
-        # Raise a clear error so the problem is visible immediately.
-        if cols_missing:
+        missing = [c for c in self._selected_cols if c not in X.columns]
+        if missing:
             raise ValueError(
-                f"FeatureSelector.transform(): {len(cols_missing)} selected column(s) are "
-                f"missing from the input DataFrame: {cols_missing}. "
-                f"This usually means an upstream preprocessing step (e.g. CorrelationFilter) "
-                f"behaved differently at transform time than at fit time. "
-                f"Columns present: {list(X.columns)}"
+                f"FeatureSelector.transform(): {len(missing)} selected column(s) missing from input: "
+                f"{missing}. This usually means an upstream step behaved differently at transform "
+                f"time than at fit time. Present columns: {list(X.columns)}"
             )
-
-        return X[cols_present]
+        return X[[c for c in self._selected_cols if c in X.columns]]
 
     def fit_transform(self, X: pd.DataFrame, y: pd.Series = None) -> pd.DataFrame:
         return self.fit(X, y).transform(X)
@@ -154,8 +130,6 @@ class FeatureSelector:
     @property
     def selected_features(self) -> List[str]:
         return list(self._selected_cols)
-
-    # ------------------------------------------------------------------
 
     def _resolve_k(self, n_total: int) -> int:
         if isinstance(self.keep_k, float) and 0 < self.keep_k <= 1.0:

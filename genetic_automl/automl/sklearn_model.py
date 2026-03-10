@@ -1,13 +1,7 @@
 """
-Sklearn fallback backend.
+Sklearn GBM backend — wraps GradientBoosting{Classifier,Regressor}.
 
-B4 fix: the internal ColumnTransformer (imputer + scaler + one-hot encoder) has been
-removed. By the time data reaches SklearnModel it has already been fully preprocessed
-by PreprocessingPipeline (imputation, scaling, encoding, feature selection, etc.).
-Applying a second StandardScaler on top of already-scaled data biased the model away
-from what the GA evaluated during CV.
-
-The model now wraps only the estimator — no internal preprocessing.
+All preprocessing is handled upstream by PreprocessingPipeline.
 """
 
 from __future__ import annotations
@@ -27,19 +21,13 @@ log = get_logger(__name__)
 
 class SklearnModel(BaseAutoML):
     """
-    Lightweight sklearn GBM wrapper — no internal preprocessing.
-
-    All preprocessing (imputation, scaling, encoding, feature selection)
-    is handled upstream by PreprocessingPipeline before this class is called.
+    Lightweight sklearn GBM wrapper with no internal preprocessing.
 
     Parameters
     ----------
     n_estimators : int
-        Number of boosting stages.
     max_depth : int
-        Maximum tree depth.
     learning_rate : float
-        Shrinkage parameter.
     """
 
     def __init__(
@@ -59,27 +47,16 @@ class SklearnModel(BaseAutoML):
         self.learning_rate = learning_rate
         self._estimator = None
 
-    # ------------------------------------------------------------------
-
     def _build_estimator(self):
-        if self.problem_type in (
-            ProblemType.CLASSIFICATION,
-            ProblemType.MULTI_OBJECTIVE,
-        ):
-            return GradientBoostingClassifier(
-                n_estimators=self.n_estimators,
-                max_depth=self.max_depth,
-                learning_rate=self.learning_rate,
-                random_state=self.random_seed,
-            )
-        return GradientBoostingRegressor(
+        params = dict(
             n_estimators=self.n_estimators,
             max_depth=self.max_depth,
             learning_rate=self.learning_rate,
             random_state=self.random_seed,
         )
-
-    # ------------------------------------------------------------------
+        if self.problem_type in (ProblemType.CLASSIFICATION, ProblemType.MULTI_OBJECTIVE):
+            return GradientBoostingClassifier(**params)
+        return GradientBoostingRegressor(**params)
 
     def fit(
         self,
@@ -90,18 +67,13 @@ class SklearnModel(BaseAutoML):
     ) -> "SklearnModel":
         log.info(
             "SklearnModel fit | estimators=%d | depth=%d | samples=%d | features=%d",
-            self.n_estimators,
-            self.max_depth,
-            len(y_train),
-            X_train.shape[1],
+            self.n_estimators, self.max_depth, len(y_train), X_train.shape[1],
         )
         start = self._start_timer()
         self._estimator = self._build_estimator()
-        # Data already preprocessed upstream — fit estimator directly
         self._estimator.fit(X_train.values, y_train.values)
-        elapsed = self._stop_timer(start)
         self._is_fitted = True
-        log.info("SklearnModel fit complete in %.2fs", elapsed)
+        log.info("SklearnModel fit complete in %.2fs", self._stop_timer(start))
         return self
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:
@@ -112,19 +84,13 @@ class SklearnModel(BaseAutoML):
         self._check_fitted()
         if self.problem_type == ProblemType.REGRESSION:
             return None
-        if hasattr(self._estimator, "predict_proba"):
-            return self._estimator.predict_proba(X.values)
-        return None
+        return self._estimator.predict_proba(X.values) if hasattr(self._estimator, "predict_proba") else None
 
     def get_params(self) -> dict:
-        base = super().get_params()
-        base.update(
-            {
-                "backend": "sklearn",
-                "n_estimators": self.n_estimators,
-                "max_depth": self.max_depth,
-                "learning_rate": self.learning_rate,
-            }
-        )
-        return base
-
+        return {
+            **super().get_params(),
+            "backend": "sklearn",
+            "n_estimators": self.n_estimators,
+            "max_depth": self.max_depth,
+            "learning_rate": self.learning_rate,
+        }
