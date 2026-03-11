@@ -51,7 +51,20 @@ _METRIC_REGISTRY: Dict[str, Tuple[Any, MetricDirection]] = {
     ),
     "accuracy": (accuracy_score, MetricDirection.MAXIMIZE),
     "roc_auc": (
-        lambda y, yp: roc_auc_score(y, yp, multi_class="ovr", average="macro"),
+        lambda y, yp: (
+            # 2-D array → full multiclass probability matrix (N, C)
+            roc_auc_score(y, yp, multi_class="ovr", average="macro")
+            if (hasattr(yp, "ndim") and np.asarray(yp).ndim == 2)
+            # 1-D array with >2 unique values → cannot compute roc_auc from hard labels
+            else (_ for _ in ()).throw(ValueError(
+                "roc_auc requires probability scores for multiclass problems. "
+                "Pass a (N, C) probability matrix, not hard integer labels. "
+                "Use BaseAutoML.score() which routes through predict_proba() automatically."
+            ))
+            if len(np.unique(np.asarray(y))) > 2
+            # 1-D binary → standard binary roc_auc
+            else roc_auc_score(y, yp)
+        ),
         MetricDirection.MAXIMIZE,
     ),
     # Regression

@@ -125,6 +125,7 @@ class Chromosome:
 
     genes: Dict[str, Any]
     fitness: Optional[float] = None
+    fitness_std: Optional[float] = None
     generation: int = 0
     parent_ids: List[str] = field(default_factory=list)
     id: str = field(default_factory=lambda: _random_id())
@@ -135,6 +136,7 @@ class Chromosome:
         c = Chromosome(
             genes=copy.deepcopy(self.genes),
             fitness=self.fitness,
+            fitness_std=self.fitness_std,
             generation=self.generation,
             parent_ids=list(self.parent_ids),
         )
@@ -145,16 +147,15 @@ class Chromosome:
             "id": self.id,
             "genes": self.genes,
             "fitness": self.fitness,
+            "fitness_std": self.fitness_std,
             "generation": self.generation,
             "parent_ids": self.parent_ids,
         }
 
     def __repr__(self) -> str:
         genes_str = ", ".join(f"{k}={v}" for k, v in self.genes.items())
-        return (
-            f"Chromosome(id={self.id}, fitness={self.fitness:.6f if self.fitness is not None else 'None'}, "
-            f"genes=[{genes_str}])"
-        )
+        fitness_str = f"{self.fitness:.6f}" if self.fitness is not None else "None"
+        return f"Chromosome(id={self.id}, fitness={fitness_str}, genes=[{genes_str}])"
 
 
 # ---------------------------------------------------------------------------

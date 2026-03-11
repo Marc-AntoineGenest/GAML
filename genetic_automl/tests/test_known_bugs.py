@@ -23,12 +23,37 @@ from genetic_automl.core.base_automl import BaseAutoML
 # ---------------------------------------------------------------------------
 
 def test_b3_roc_auc_routing_is_correct():
-    """roc_auc_score with multi_class='ovr' requires probability scores, not integer labels."""
-    y_true = np.array([0, 1, 2, 0, 1, 2])
-    y_pred = np.array([0, 1, 2, 0, 2, 1])  # hard integer labels from predict()
+    """
+    FIXED: roc_auc in _METRIC_REGISTRY now routes by input shape and class count:
+
+      - 2-D array (N, C)  → multi_class='ovr' with probability matrix  ✓
+      - 1-D binary        → standard binary roc_auc_score               ✓
+      - 1-D multiclass    → raises ValueError with a clear message
+                            (hard labels are fundamentally unsupported for multiclass AUC)
+
+    The correct production path is BaseAutoML.score(metric='roc_auc'), which routes
+    through predict_proba() automatically and always delivers a 2-D proba matrix.
+    """
     fn, _ = _METRIC_REGISTRY["roc_auc"]
-    result = fn(y_true, y_pred)
-    assert 0.0 <= result <= 1.0
+
+    # Path 1: 2-D multiclass probability matrix — must work
+    rng = np.random.default_rng(0)
+    y_true_multi = np.array([0, 1, 2, 0, 1, 2])
+    raw = rng.random((6, 3))
+    proba_matrix = raw / raw.sum(axis=1, keepdims=True)
+    result = fn(y_true_multi, proba_matrix)
+    assert 0.0 <= result <= 1.0, "2-D proba matrix path must return a valid AUC"
+
+    # Path 2: 1-D binary scores — must work
+    y_true_bin = np.array([0, 1, 0, 1, 0, 1])
+    scores_bin = np.array([0.1, 0.9, 0.2, 0.8, 0.3, 0.7])
+    result_bin = fn(y_true_bin, scores_bin)
+    assert 0.0 <= result_bin <= 1.0, "1-D binary scores path must return a valid AUC"
+
+    # Path 3: 1-D multiclass hard labels — must raise a clear ValueError
+    y_pred_hard = np.array([0, 1, 2, 0, 2, 1])
+    with pytest.raises(ValueError, match="roc_auc requires probability scores"):
+        fn(y_true_multi, y_pred_hard)
 
 
 # ---------------------------------------------------------------------------

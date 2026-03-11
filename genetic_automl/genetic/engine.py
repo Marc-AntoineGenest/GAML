@@ -1,16 +1,18 @@
 """
 GeneticEngine — orchestrates the full evolution loop.
 
-Generation flow (updated):
+Generation flow:
   0. Warm-start: build gen-0 via default seeds + halving pre-screen
   --- per generation ---
   1. Evaluate unevaluated individuals (k-fold CV via FitnessEvaluator)
   2. Compute stats (best / mean / worst fitness)
-  3. Diversity check: compute mean Hamming distance
+  3. Update improvement streak — BEFORE diversity so controller sees correct value
+     → reset to 0 on improvement; increment on stagnation
+  4. Diversity check: compute mean Hamming distance
      → inject fresh individuals if below threshold
      → boost mutation rate if stagnating; decay back on improvement
-  4. Early stopping check
-  5. Breed next generation using current (adaptive) mutation rate
+  5. Early stopping check
+  6. Breed next generation using current (adaptive) mutation rate
 """
 
 from __future__ import annotations
@@ -163,13 +165,25 @@ class GeneticEngine:
                 gen_idx + 1, best_fit, mean_fit, worst_fit, elapsed,
             )
 
-            # ── Step 3: diversity + adaptive mutation ──────────────────
+            # ── Step 3: update improvement streak (must happen before diversity
+            #    so the controller sees the correct stale-free streak value) ──
+            if best_fit > best_fitness_so_far:
+                best_fitness_so_far = best_fit
+                no_improvement_streak = 0
+            else:
+                no_improvement_streak += 1
+                log.info(
+                    "No improvement for %d / %d rounds",
+                    no_improvement_streak, cfg.early_stopping_rounds,
+                )
+
+            # ── Step 4: diversity + adaptive mutation ──────────────────
             population, current_mut_rate = self._diversity.update(
                 population, gen_idx, no_improvement_streak,
             )
             div_stats = self._diversity.history[-1]
 
-            # ── Step 4: record stats ───────────────────────────────────
+            # ── Step 5: record stats ───────────────────────────────────
             self.history.generations.append(GenerationStats(
                 generation=gen_idx,
                 best_fitness=best_fit,
@@ -183,22 +197,12 @@ class GeneticEngine:
                 best_chromosome=best_chrom,
             ))
 
-            # ── Step 5: early stopping ─────────────────────────────────
-            if best_fit > best_fitness_so_far:
-                best_fitness_so_far = best_fit
-                no_improvement_streak = 0
-            else:
-                no_improvement_streak += 1
-                log.info(
-                    "No improvement for %d / %d rounds",
-                    no_improvement_streak, cfg.early_stopping_rounds,
-                )
-
+            # ── Step 6: early stopping ─────────────────────────────────
             if no_improvement_streak >= cfg.early_stopping_rounds:
                 log.info("Early stopping triggered at generation %d.", gen_idx + 1)
                 break
 
-            # ── Step 6: breed next generation ─────────────────────────
+            # ── Step 7: breed next generation ─────────────────────────
             if gen_idx < cfg.generations - 1:
                 population = self._breed(population, gen_idx + 1, current_mut_rate)
 

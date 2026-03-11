@@ -98,6 +98,20 @@ class CategoricalEncoder:
         if not self._cat_cols:
             return X
         X = X.copy()
+
+        # Columns that were seen at fit time but are absent from X at transform time.
+        # We fill them with the missing sentinel so downstream encoders never see a
+        # column-count mismatch (e.g. OHE raises "X has 0 features but expected N").
+        absent_cols = [c for c in self._cat_cols if c not in X.columns]
+        if absent_cols:
+            log.warning(
+                "CategoricalEncoder.transform(): %d column(s) absent from input that "
+                "were present at fit time — filling with '__MISSING__': %s",
+                len(absent_cols), absent_cols,
+            )
+            for col in absent_cols:
+                X[col] = "__MISSING__"
+
         cols = [c for c in self._cat_cols if c in X.columns]
         X_cat = self._fill_missing(X[cols])
         non_cat = X.drop(columns=cols)

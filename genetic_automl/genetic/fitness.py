@@ -174,11 +174,10 @@ class FitnessEvaluator:
             fitness_std = float(np.std(valid)) if len(valid) > 1 else 0.0
 
             chromosome.fitness = fitness
-            chromosome.fitness_std = fitness_std  # type: ignore[attr-defined]
+            chromosome.fitness_std = fitness_std
 
-            # Store best fold preprocessor for potential final reuse
-            # (we refit on full train anyway, but this tracks config)
-            chromosome._pp_genes = pp_genes  # type: ignore[attr-defined]
+            # Store preprocessing gene config on chromosome for lineage tracking
+            chromosome._pp_genes = pp_genes  # noqa: SLF001  # intentional dynamic attr
 
             log.info(
                 "Chromosome %s | CV fitness=%.6f ± %.6f | genes=%s",

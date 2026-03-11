@@ -76,8 +76,29 @@ class ImbalanceHandler:
                 )
                 self._effective_method = "class_weight"
             else:
-                self._resampler = self._build_resampler()
-                self._effective_method = self.method
+                # Guard: k_neighbors must be < smallest minority class count.
+                # imblearn uses k_neighbors+1 internally, so the effective limit
+                # is minority_count - 1.
+                min_class_count = int(y.value_counts().min())
+                safe_k = min(self.k_neighbors, min_class_count - 1)
+                if safe_k < self.k_neighbors:
+                    log.warning(
+                        "ImbalanceHandler('%s'): minority class has only %d sample(s); "
+                        "auto-reducing k_neighbors from %d → %d to avoid crash. "
+                        "Consider collecting more data for the minority class.",
+                        self.method, min_class_count, self.k_neighbors, safe_k,
+                    )
+                    self.k_neighbors = safe_k
+                if safe_k < 1:
+                    log.warning(
+                        "ImbalanceHandler('%s'): minority class is too small (count=%d) "
+                        "for any SMOTE variant. Falling back to 'class_weight'.",
+                        self.method, min_class_count,
+                    )
+                    self._effective_method = "class_weight"
+                else:
+                    self._resampler = self._build_resampler()
+                    self._effective_method = self.method
 
         log.info(
             "ImbalanceHandler(method=%s): class distribution %s",

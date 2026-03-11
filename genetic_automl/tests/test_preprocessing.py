@@ -206,7 +206,8 @@ class TestFeatureSelector:
 class TestPreprocessingPipeline:
     def test_no_nan_after_pipeline(self, small_X_y):
         X, y = small_X_y
-        X["a"].iloc[:10] = np.nan
+        X = X.copy()
+        X.loc[X.index[:10], "a"] = np.nan
         config = PreprocessingConfig(numeric_imputer="median", outlier_method="none",
                                       scaler="standard", categorical_encoder="onehot",
                                       feature_selection_method="none")
@@ -225,13 +226,27 @@ class TestPreprocessingPipeline:
         assert X_train_out.shape[1] == X_val_out.shape[1]
 
     def test_zero_leakage_imputer(self):
-        """Imputer must use train statistics when transforming val."""
+        """Imputer must use train statistics when transforming val.
+
+        Config explicitly disables scaler and all other transformations so that
+        the only transformation applied is median imputation — allowing the test
+        to assert the raw imputed value rather than a scaled version of it.
+        """
         X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0] * 30})
         X_val = pd.DataFrame({"a": [np.nan] * 10})
         y = pd.Series([0, 1] * 45)
-        config = PreprocessingConfig(numeric_imputer="median")
+        config = PreprocessingConfig(
+            numeric_imputer="median",
+            scaler="none",
+            outlier_method="none",
+            correlation_threshold=None,
+            distribution_transform="none",
+            missing_indicator=False,
+            feature_selection_method="none",
+            imbalance_method="none",
+        )
         pp = PreprocessingPipeline(config, ProblemType.CLASSIFICATION)
         pp.fit_transform_train(X_train, y)
         X_val_out = pp.transform(X_val)
         # All NaNs should fill to 2.0 (train median), not some val-based value
-        assert (X_val_out["a"] == pytest.approx(2.0)).all()
+        assert np.allclose(X_val_out["a"].values, 2.0)
