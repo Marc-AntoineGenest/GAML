@@ -23,7 +23,13 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 import pandas as pd
-from joblib import Parallel, delayed
+from sklearn.utils.parallel import Parallel, delayed
+
+try:
+    from tqdm import tqdm as _tqdm
+    _TQDM_AVAILABLE = True
+except ImportError:
+    _TQDM_AVAILABLE = False
 
 from genetic_automl.config import GeneticConfig
 from genetic_automl.genetic.chromosome import Chromosome, build_gene_space_from_config, random_population
@@ -149,9 +155,15 @@ class GeneticEngine:
         no_improvement_streak = 0
         best_fitness_so_far = float("-inf")
 
-        for gen_idx in range(cfg.generations):
+        gen_range = range(cfg.generations)
+        pbar = (
+            _tqdm(gen_range, desc="Evolution", unit="gen", dynamic_ncols=True)
+            if _TQDM_AVAILABLE else gen_range
+        )
+
+        for gen_idx in pbar:
             gen_start = time.perf_counter()
-            log.info("── Generation %d / %d ──", gen_idx + 1, cfg.generations)
+            log.info("-- Generation %d / %d --", gen_idx + 1, cfg.generations)
 
             # ── Step 1: evaluate unevaluated individuals ───────────────
             unevaluated = [c for c in population if c.fitness is None]
@@ -210,6 +222,14 @@ class GeneticEngine:
                 best_chromosome=best_chrom,
             ))
 
+            if _TQDM_AVAILABLE and hasattr(pbar, "set_postfix"):
+                pbar.set_postfix(
+                    best=f"{best_fit:.4f}",
+                    mut=f"{current_mut_rate:.2f}",
+                    stale=no_improvement_streak,
+                    refresh=True,
+                )
+
             # ── Step 6: early stopping ─────────────────────────────────
             if no_improvement_streak >= cfg.early_stopping_rounds:
                 log.info("Early stopping triggered at generation %d.", gen_idx + 1)
@@ -227,7 +247,7 @@ class GeneticEngine:
             div_summary.get("n_injections_total", 0),
             div_summary.get("n_boosts_total", 0),
         )
-        log.info("Best genes: %s", best.genes)
+        self._log_leaderboard(top_n=5)
         return best
 
     # ------------------------------------------------------------------
@@ -349,6 +369,43 @@ class GeneticEngine:
                 new_pop.append(child)
 
         return new_pop[: self.cfg.population_size]
+
+    # ------------------------------------------------------------------
+    # Leaderboard
+    # ------------------------------------------------------------------
+
+    def _log_leaderboard(self, top_n: int = 5) -> None:
+        """Print a formatted top-N leaderboard to the log after evolution."""
+        evaluated = [c for c in self.history.all_chromosomes if c.fitness is not None]
+        if not evaluated:
+            return
+        # Deduplicate by gene fingerprint — keep best fitness per unique config
+        seen: dict = {}
+        for c in evaluated:
+            key = tuple(sorted(c.genes.items()))
+            if key not in seen or c.fitness > seen[key].fitness:
+                seen[key] = c
+        ranked = sorted(seen.values(), key=lambda c: c.fitness, reverse=True)[:top_n]
+
+        sep = "-" * 72
+        log.info(sep)
+        log.info("  TOP-%d LEADERBOARD", min(top_n, len(ranked)))
+        log.info(sep)
+        log.info("  %-4s  %-10s  %-8s  %-10s  Key genes", "Rank", "Fitness", "+/-Std", "ID")
+        log.info(sep)
+        for rank, c in enumerate(ranked, 1):
+            std_str = f"{c.fitness_std:.4f}" if c.fitness_std is not None else "  n/a "
+            # Summarise the most informative genes on one line
+            key_genes = {
+                k: v for k, v in c.genes.items()
+                if k in ("scaler", "numeric_imputer", "categorical_encoder",
+                         "imbalance_method", "n_estimators", "presets")
+            }
+            log.info(
+                "  %-4d  %-10.6f  %-8s  %-10s  %s",
+                rank, c.fitness, std_str, c.id, key_genes,
+            )
+        log.info(sep)
 
     # ------------------------------------------------------------------
     # Accessors for reporting

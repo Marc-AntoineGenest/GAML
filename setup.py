@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="genetic_automl",
-    version="0.3.0",
+    version="0.4.0",
     description="Genetic Algorithm-driven AutoML pipeline for tabular data",
     packages=find_packages(),
     python_requires=">=3.9",
@@ -10,6 +10,8 @@ setup(
         "pandas>=2.0",
         "scikit-learn>=1.3",
         "numpy>=1.24",
+        "joblib>=1.3",
+        "tqdm>=4.60",
     ],
     extras_require={
         "autogluon": ["autogluon.tabular>=1.0"],

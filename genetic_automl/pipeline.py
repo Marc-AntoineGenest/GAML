@@ -19,6 +19,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+from joblib import dump as _jdump, load as _jload
 
 from genetic_automl.automl import build_automl
 from genetic_automl.config import PipelineConfig
@@ -247,6 +248,76 @@ class AutoMLPipeline:
     @property
     def final_score(self) -> Optional[float]:
         return self._final_score
+
+    # ------------------------------------------------------------------
+
+    def save(self, path: str) -> str:
+        """
+        Persist the fitted pipeline to disk.
+
+        Saves the preprocessor, model, config, and metric name using joblib.
+        The saved file can be reloaded with :meth:`AutoMLPipeline.load`.
+
+        Parameters
+        ----------
+        path : str
+            File path to write (e.g. ``"my_pipeline.joblib"``).
+            The ``.joblib`` extension is recommended but not enforced.
+
+        Returns
+        -------
+        str
+            The resolved absolute path of the saved file.
+
+        Raises
+        ------
+        RuntimeError
+            If the pipeline has not been fitted yet.
+        """
+        self._check_fitted()
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        payload = {
+            "preprocessor": self._best_preprocessor,
+            "model": self._best_model,
+            "config": self.config,
+            "metric_name": self._metric_name,
+            "final_score": self._final_score,
+        }
+        _jdump(payload, path)
+        log.info("Pipeline saved to %s", os.path.abspath(path))
+        return os.path.abspath(path)
+
+    @classmethod
+    def load(cls, path: str) -> "AutoMLPipeline":
+        """
+        Reload a pipeline that was saved with :meth:`save`.
+
+        The returned pipeline is ready to call :meth:`predict`,
+        :meth:`predict_proba`, and :meth:`score` immediately — no
+        re-fitting required.
+
+        Parameters
+        ----------
+        path : str
+            Path to a file previously written by :meth:`save`.
+
+        Returns
+        -------
+        AutoMLPipeline
+        """
+        payload = _jload(path)
+        instance = cls.__new__(cls)
+        instance.config = payload["config"]
+        instance._gene_space_overrides = {}
+        instance._data_manager = None
+        instance._best_preprocessor = payload["preprocessor"]
+        instance._best_model = payload["model"]
+        instance._history = None
+        instance._report_path = None
+        instance._final_score = payload.get("final_score")
+        instance._metric_name = payload["metric_name"]
+        log.info("Pipeline loaded from %s", os.path.abspath(path))
+        return instance
 
     # ------------------------------------------------------------------
 

@@ -79,7 +79,7 @@ class GeneticConfig:
     fitness_std_penalty: float = 0.5
     """Penalise high-variance chromosomes: fitness = mean_cv - penalty * std_cv.
     Set to 0.0 to disable (pure mean). Higher values favour stable pipelines.
-    Typical range: 0.3 – 1.0."""
+    Typical range: 0.3 - 1.0."""
 
     random_seed: int = 42
 
