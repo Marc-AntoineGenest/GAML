@@ -134,6 +134,7 @@ class AutoMLPipeline:
             metric=self._metric_name,
             n_folds=cfg.genetic.n_cv_folds,
             random_seed=cfg.genetic.random_seed,
+            fitness_std_penalty=cfg.genetic.fitness_std_penalty,
         )
         engine = GeneticEngine(
             genetic_config=cfg.genetic,

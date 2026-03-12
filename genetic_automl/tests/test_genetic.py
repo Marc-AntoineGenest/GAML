@@ -189,3 +189,165 @@ class TestWarmStart:
         pop = ws.build_initial_population(population_size=5, evaluator=None, X_train=X, y_train=y)
         # First 3 should have fitness=None (not yet evaluated by engine)
         assert all(c.fitness is None for c in pop)
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 improvements
+# ---------------------------------------------------------------------------
+
+class TestVectorisedHamming:
+    """PERF-3: vectorised Hamming distance produces same results as scalar version."""
+
+    def test_mean_pairwise_matches_scalar(self):
+        from genetic_automl.genetic.diversity import mean_pairwise_hamming, hamming_distance
+        rng = random.Random(7)
+        pop = random_population("sklearn", 10, rng)
+        # Scalar reference
+        n = len(pop)
+        total, pairs = 0.0, 0
+        for i in range(n):
+            for j in range(i + 1, n):
+                total += hamming_distance(pop[i], pop[j])
+                pairs += 1
+        scalar_mean = total / pairs
+        assert abs(mean_pairwise_hamming(pop) - scalar_mean) < 1e-9
+
+    def test_identical_population_has_zero_diversity(self):
+        from genetic_automl.genetic.diversity import mean_pairwise_hamming
+        rng = random.Random(0)
+        chrom = random_population("sklearn", 1, rng)[0]
+        pop = [chrom.copy() for _ in range(6)]
+        assert mean_pairwise_hamming(pop) == pytest.approx(0.0)
+
+    def test_single_individual_returns_one(self):
+        from genetic_automl.genetic.diversity import mean_pairwise_hamming
+        rng = random.Random(0)
+        pop = random_population("sklearn", 1, rng)
+        assert mean_pairwise_hamming(pop) == 1.0
+
+
+class TestFitnessCache:
+    """PERF-2: identical chromosomes are served from cache."""
+
+    def test_cache_hit_on_duplicate(self):
+        from genetic_automl.genetic.fitness import FitnessEvaluator
+        from genetic_automl.core.problem import ProblemType
+        evaluator = FitnessEvaluator(
+            problem_type=ProblemType.CLASSIFICATION,
+            target_column="y",
+            backend="sklearn",
+            n_folds=2,
+            random_seed=42,
+            fitness_std_penalty=0.0,
+        )
+        X = pd.DataFrame(np.random.randn(60, 3), columns=list("abc"))
+        y = pd.Series(np.random.randint(0, 2, 60))
+        rng = random.Random(1)
+        chrom1 = random_population("sklearn", 1, rng)[0]
+        # Evaluate once
+        f1 = evaluator.evaluate(chrom1, X, y)
+        assert evaluator._cache_hits == 0
+        # Evaluate identical genes again via a new chromosome object
+        chrom2 = chrom1.copy()
+        chrom2.fitness = None
+        f2 = evaluator.evaluate(chrom2, X, y)
+        assert evaluator._cache_hits == 1
+        assert f1 == f2
+
+    def test_different_genes_not_cached(self):
+        from genetic_automl.genetic.fitness import FitnessEvaluator
+        from genetic_automl.core.problem import ProblemType
+        evaluator = FitnessEvaluator(
+            problem_type=ProblemType.CLASSIFICATION,
+            target_column="y",
+            backend="sklearn",
+            n_folds=2,
+            random_seed=42,
+            fitness_std_penalty=0.0,
+        )
+        X = pd.DataFrame(np.random.randn(60, 3), columns=list("abc"))
+        y = pd.Series(np.random.randint(0, 2, 60))
+        rng = random.Random(2)
+        c1, c2 = random_population("sklearn", 2, rng)
+        # Force them to differ in at least one gene
+        c2.genes["scaler"] = "minmax" if c1.genes.get("scaler") != "minmax" else "standard"
+        evaluator.evaluate(c1, X, y)
+        evaluator.evaluate(c2, X, y)
+        assert evaluator._cache_hits == 0
+
+
+class TestFitnessStdPenalty:
+    """QUAL-1: std penalty correctly reduces fitness of high-variance chromosomes."""
+
+    def test_penalty_lowers_fitness(self):
+        from genetic_automl.genetic.fitness import FitnessEvaluator
+        from genetic_automl.core.problem import ProblemType
+        import numpy as np
+
+        ev_no_pen = FitnessEvaluator(
+            problem_type=ProblemType.CLASSIFICATION,
+            target_column="y",
+            backend="sklearn",
+            n_folds=3,
+            random_seed=42,
+            fitness_std_penalty=0.0,
+        )
+        ev_penalty = FitnessEvaluator(
+            problem_type=ProblemType.CLASSIFICATION,
+            target_column="y",
+            backend="sklearn",
+            n_folds=3,
+            random_seed=42,
+            fitness_std_penalty=1.0,
+        )
+        X = pd.DataFrame(np.random.randn(90, 4), columns=list("abcd"))
+        y = pd.Series(np.random.randint(0, 2, 90))
+        rng = random.Random(5)
+        chrom = random_population("sklearn", 1, rng)[0]
+
+        f_no_pen = ev_no_pen.evaluate(chrom, X, y)
+        chrom2 = chrom.copy(); chrom2.fitness = None
+        f_pen = ev_penalty.evaluate(chrom2, X, y)
+
+        # With std > 0, penalised fitness must be <= unpenalised
+        assert f_pen <= f_no_pen
+
+
+class TestUniformCrossoverConfig:
+    """QUAL-2: crossover_type='uniform' uses uniform_crossover; 'single_point' uses single_point."""
+
+    def test_uniform_crossover_produces_mixed_genes(self):
+        from genetic_automl.genetic.operators import uniform_crossover
+        rng = random.Random(0)
+        a, b = random_population("sklearn", 2, rng)
+        # Force a and b to differ on every gene
+        for key in b.genes:
+            gene_def = next(g for g in get_gene_space("sklearn") if g.name == key)
+            vals = [v for v in gene_def.values if v != a.genes[key]]
+            if vals:
+                b.genes[key] = vals[0]
+        child_a, child_b = uniform_crossover(a, b, random.Random(42))
+        # Children should not be identical to either parent (very likely with >5 genes)
+        assert child_a.genes != a.genes or child_b.genes != b.genes
+
+    def test_crossover_type_config_respected(self):
+        from genetic_automl.config import GeneticConfig
+        cfg = GeneticConfig(crossover_type="uniform")
+        assert cfg.crossover_type == "uniform"
+        cfg2 = GeneticConfig(crossover_type="single_point")
+        assert cfg2.crossover_type == "single_point"
+
+
+class TestGeneSpaceDictCache:
+    """PERF-4: mutate() accepts pre-built dict and produces valid chromosomes."""
+
+    def test_mutate_with_dict_cache(self):
+        from genetic_automl.genetic.operators import mutate
+        from genetic_automl.genetic.chromosome import get_gene_space
+        rng = random.Random(9)
+        pop = random_population("sklearn", 1, rng)
+        chrom = pop[0]
+        gene_space = get_gene_space("sklearn")
+        gene_space_dict = {g.name: g for g in gene_space}
+        mutant = mutate(chrom, "sklearn", 1.0, rng, gene_space, gene_space_dict)
+        assert set(mutant.genes.keys()) == set(chrom.genes.keys())

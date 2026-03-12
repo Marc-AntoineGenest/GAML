@@ -151,6 +151,9 @@ def load_config(
         adaptive_mutation_stagnation_rounds=int(gen_cfg.get("adaptive_mutation_stagnation_rounds", 3)),
         adaptive_mutation_boost_factor=float(gen_cfg.get("adaptive_mutation_boost_factor", 2.5)),
         adaptive_mutation_decay=float(gen_cfg.get("adaptive_mutation_decay", 0.85)),
+        fitness_std_penalty=float(gen_cfg.get("fitness_std_penalty", 0.5)),
+        crossover_type=str(gen_cfg.get("crossover_type", "uniform")),
+        n_jobs=int(gen_cfg.get("n_jobs", 1)),
         random_seed=int(gen_cfg.get("random_seed", 42)),
     )
 

@@ -31,6 +31,11 @@ class GeneticConfig:
     crossover_rate: float = 0.7
     """Probability that two parents produce offspring via crossover."""
 
+    crossover_type: str = "uniform"
+    """Crossover operator. Options: 'uniform' (default), 'single_point'.
+    Uniform crossover flips each gene independently (p=0.5 per gene) — better
+    exploration across the full gene space. single_point splits at one cut."""
+
     elite_ratio: float = 0.1
     """Fraction of top individuals preserved unchanged each generation."""
 
@@ -69,7 +74,21 @@ class GeneticConfig:
     """Multiply base mutation_rate by this factor on stagnation."""
     adaptive_mutation_decay: float = 0.85
     """Per-generation decay toward base_rate after a boost."""
+
+    # --- Fitness stability ---
+    fitness_std_penalty: float = 0.5
+    """Penalise high-variance chromosomes: fitness = mean_cv - penalty * std_cv.
+    Set to 0.0 to disable (pure mean). Higher values favour stable pipelines.
+    Typical range: 0.3 – 1.0."""
+
     random_seed: int = 42
+
+    # --- Parallelism ---
+    n_jobs: int = 1
+    """Number of parallel workers for chromosome fitness evaluation.
+    -1 uses all available CPU cores. 1 = sequential (default — safe for
+    AutoGluon which manages its own thread pool). Use -1 or a fixed count
+    with the sklearn backend, or when AutoGluon parallel safety is confirmed."""
 
 
 # ---------------------------------------------------------------------------

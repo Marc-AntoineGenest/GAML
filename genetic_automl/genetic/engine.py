@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 import pandas as pd
+from joblib import Parallel, delayed
 
 from genetic_automl.config import GeneticConfig
 from genetic_automl.genetic.chromosome import Chromosome, build_gene_space_from_config, random_population
@@ -32,6 +33,7 @@ from genetic_automl.genetic.operators import (
     elites,
     mutate,
     single_point_crossover,
+    uniform_crossover,
     tournament_selection,
 )
 from genetic_automl.genetic.warm_start import WarmStart
@@ -102,6 +104,8 @@ class GeneticEngine:
         self.history = EvolutionHistory()
         # Resolve gene space once — used by all population/mutation operations
         self._gene_space = build_gene_space_from_config(backend, gene_space_overrides or {})
+        # Pre-built dict for O(1) lookup in mutate() — avoids rebuilding per call
+        self._gene_space_dict = {g.name: g for g in self._gene_space}
 
         # Diversity controller (always instantiated; disabled by threshold=0 if needed)
         self._diversity = PopulationDiversity(
@@ -150,10 +154,15 @@ class GeneticEngine:
             log.info("── Generation %d / %d ──", gen_idx + 1, cfg.generations)
 
             # ── Step 1: evaluate unevaluated individuals ───────────────
-            for chrom in population:
-                if chrom.fitness is None:
-                    self.evaluator.evaluate(chrom, X_train, y_train)
+            unevaluated = [c for c in population if c.fitness is None]
+            if unevaluated:
+                self._evaluate_population(unevaluated, X_train, y_train)
+                for chrom in unevaluated:
                     self.history.all_chromosomes.append(chrom)
+                log.info(
+                    "Gen %d | evaluated=%d | cache_hits=%d",
+                    gen_idx + 1, len(unevaluated), self.evaluator._cache_hits,
+                )
 
             # ── Step 2: compute stats ──────────────────────────────────
             valid = [c for c in population if c.fitness is not None]
@@ -222,6 +231,50 @@ class GeneticEngine:
         return best
 
     # ------------------------------------------------------------------
+    # Evaluation (sequential or parallel)
+    # ------------------------------------------------------------------
+
+    def _evaluate_population(
+        self,
+        population: List[Chromosome],
+        X_train: pd.DataFrame,
+        y_train,
+    ) -> None:
+        """
+        Evaluate all unevaluated chromosomes, writing fitness back in-place.
+
+        When cfg.n_jobs == 1, runs sequentially (default — safe for all backends).
+        When cfg.n_jobs != 1, uses joblib.Parallel with the loky backend to
+        evaluate each chromosome in a separate worker process.
+
+        Note: the fitness cache is NOT shared across workers in parallel mode —
+        each worker receives a fresh evaluator copy. Cache hits still work for
+        chromosomes that are already in the *current process* cache (elites
+        that carry over from the previous generation already have fitness set
+        and are skipped before reaching this method).
+        """
+        if self.cfg.n_jobs == 1:
+            # Sequential path — cache is fully effective
+            for chrom in population:
+                self.evaluator.evaluate(chrom, X_train, y_train)
+            return
+
+        # Parallel path — spawn workers via loky
+        def _worker(chrom: Chromosome) -> tuple:
+            """Returns (chromosome_id, fitness, fitness_std)."""
+            fitness = self.evaluator.evaluate(chrom, X_train, y_train)
+            return chrom.id, fitness, chrom.fitness_std
+
+        results = Parallel(n_jobs=self.cfg.n_jobs, backend="loky", prefer="processes")(
+            delayed(_worker)(chrom) for chrom in population
+        )
+        # Write results back — workers operated on copies, so update originals
+        result_map = {r[0]: (r[1], r[2]) for r in results}
+        for chrom in population:
+            if chrom.id in result_map:
+                chrom.fitness, chrom.fitness_std = result_map[chrom.id]
+
+    # ------------------------------------------------------------------
     # Population initialisation
     # ------------------------------------------------------------------
 
@@ -274,19 +327,24 @@ class GeneticEngine:
         new_pop.extend(elite_individuals)
 
         # Fill remaining slots via crossover + mutation
+        crossover_fn = (
+            uniform_crossover
+            if self.cfg.crossover_type == "uniform"
+            else single_point_crossover
+        )
         while len(new_pop) < self.cfg.population_size:
             if self._rng.random() < self.cfg.crossover_rate:
                 parent_a = tournament_selection(population, self.cfg.tournament_size, self._rng)
                 parent_b = tournament_selection(population, self.cfg.tournament_size, self._rng)
-                child_a, child_b = single_point_crossover(parent_a, parent_b, self._rng)
+                child_a, child_b = crossover_fn(parent_a, parent_b, self._rng)
                 for child in (child_a, child_b):
                     if len(new_pop) < self.cfg.population_size:
-                        child = mutate(child, self.backend, mutation_rate, self._rng, self._gene_space)
+                        child = mutate(child, self.backend, mutation_rate, self._rng, self._gene_space, self._gene_space_dict)
                         child.generation = next_gen
                         new_pop.append(child)
             else:
                 parent = tournament_selection(population, self.cfg.tournament_size, self._rng)
-                child = mutate(parent, self.backend, mutation_rate, self._rng, self._gene_space)
+                child = mutate(parent, self.backend, mutation_rate, self._rng, self._gene_space, self._gene_space_dict)
                 child.generation = next_gen
                 new_pop.append(child)
 

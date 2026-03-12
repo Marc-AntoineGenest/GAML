@@ -92,6 +92,7 @@ class FitnessEvaluator:
         multi_objective_metrics: Optional[List[str]] = None,
         multi_objective_weights: Optional[List[float]] = None,
         random_seed: int = 42,
+        fitness_std_penalty: float = 0.5,
     ) -> None:
         self.problem_type = problem_type
         self.target_column = target_column
@@ -101,6 +102,10 @@ class FitnessEvaluator:
         self.multi_objective_metrics = multi_objective_metrics
         self.multi_objective_weights = multi_objective_weights
         self.random_seed = random_seed
+        self.fitness_std_penalty = fitness_std_penalty
+        # PERF-2: cache evaluated (gene_key → fitness) to skip duplicate chromosomes
+        self._cache: dict = {}
+        self._cache_hits: int = 0
 
     # ------------------------------------------------------------------
 
@@ -116,6 +121,19 @@ class FitnessEvaluator:
         Evaluate via k-fold CV. Returns mean fitness across folds.
         Returns float('-inf') on any exception.
         """
+        # PERF-2: return cached result for identical gene configurations
+        cache_key = tuple(sorted(chromosome.genes.items()))
+        if cache_key in self._cache:
+            cached_fitness, cached_std = self._cache[cache_key]
+            chromosome.fitness = cached_fitness
+            chromosome.fitness_std = cached_std
+            self._cache_hits += 1
+            log.debug(
+                "Chromosome %s | cache hit (fitness=%.6f) | total_hits=%d",
+                chromosome.id, cached_fitness, self._cache_hits,
+            )
+            return cached_fitness
+
         try:
             pp_genes, model_genes = _split_genes(chromosome.genes)
             fold_scores = []
@@ -173,20 +191,28 @@ class FitnessEvaluator:
             fitness = float(np.mean(valid))
             fitness_std = float(np.std(valid)) if len(valid) > 1 else 0.0
 
-            chromosome.fitness = fitness
+            # QUAL-1: penalise high-variance chromosomes — favour stable pipelines
+            penalised_fitness = fitness - self.fitness_std_penalty * fitness_std
+
+            chromosome.fitness = penalised_fitness
             chromosome.fitness_std = fitness_std
+
+            # PERF-2: cache result for future duplicate chromosomes
+            self._cache[cache_key] = (penalised_fitness, fitness_std)
 
             # Store preprocessing gene config on chromosome for lineage tracking
             chromosome._pp_genes = pp_genes  # noqa: SLF001  # intentional dynamic attr
 
             log.info(
-                "Chromosome %s | CV fitness=%.6f ± %.6f | genes=%s",
+                "Chromosome %s | CV mean=%.6f | std=%.6f | penalty=%.6f | fitness=%.6f | genes=%s",
                 chromosome.id,
                 fitness,
                 fitness_std,
+                self.fitness_std_penalty * fitness_std,
+                penalised_fitness,
                 {**pp_genes, **model_genes},
             )
-            return fitness
+            return penalised_fitness
 
         except Exception as exc:
             log.warning(

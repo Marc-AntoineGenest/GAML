@@ -45,6 +45,32 @@ log = get_logger(__name__)
 # Hamming distance utilities
 # ---------------------------------------------------------------------------
 
+def _encode_population(population: List[Chromosome]) -> np.ndarray:
+    """
+    Encode a population as an (N, G) integer matrix for vectorised distance
+    computation. Each gene value is mapped to its position in the sorted list
+    of unique values seen across the population for that gene.
+
+    Returns
+    -------
+    np.ndarray of shape (N, G), dtype int32
+    """
+    if not population:
+        return np.empty((0, 0), dtype=np.int32)
+    gene_keys = list(population[0].genes.keys())
+    n, g = len(population), len(gene_keys)
+    matrix = np.zeros((n, g), dtype=np.int32)
+    for col, key in enumerate(gene_keys):
+        # Map each distinct value to a stable integer
+        seen: dict = {}
+        for row, chrom in enumerate(population):
+            val = chrom.genes.get(key)
+            if val not in seen:
+                seen[val] = len(seen)
+            matrix[row, col] = seen[val]
+    return matrix
+
+
 def hamming_distance(a: Chromosome, b: Chromosome) -> float:
     """
     Fraction of genes that differ between two chromosomes.
@@ -60,20 +86,31 @@ def hamming_distance(a: Chromosome, b: Chromosome) -> float:
 def mean_pairwise_hamming(population: List[Chromosome]) -> float:
     """
     Compute mean pairwise Hamming distance across the whole population.
-    O(N²) but N is small (population_size ≤ 50 typically).
+
+    Vectorised implementation: encodes chromosomes as integer rows, then uses
+    numpy broadcasting to compute all pairwise distances in one C-level pass.
+    Falls back to the scalar loop for populations smaller than 3.
+
     Returns value in [0, 1].
     """
     n = len(population)
     if n < 2:
         return 1.0  # trivially diverse
 
-    total = 0.0
-    pairs = 0
-    for i in range(n):
-        for j in range(i + 1, n):
-            total += hamming_distance(population[i], population[j])
-            pairs += 1
-    return total / pairs if pairs > 0 else 0.0
+    matrix = _encode_population(population)           # (N, G)
+    # Broadcast: matrix[i] != matrix[j]  →  (N, N, G) bool
+    diff = matrix[:, None, :] != matrix[None, :, :]   # (N, N, G)
+    pairwise = diff.mean(axis=2)                       # (N, N) float, diagonal = 0
+    # Upper-triangle mean (exclude self-comparisons)
+    i_upper, j_upper = np.triu_indices(n, k=1)
+    return float(pairwise[i_upper, j_upper].mean())
+
+
+def _pairwise_matrix(population: List[Chromosome]) -> np.ndarray:
+    """Return full (N, N) pairwise Hamming matrix (vectorised)."""
+    matrix = _encode_population(population)
+    diff = matrix[:, None, :] != matrix[None, :, :]
+    return diff.mean(axis=2)
 
 
 # ---------------------------------------------------------------------------
@@ -265,25 +302,17 @@ class PopulationDiversity:
         n = len(population)
         if n < 2:
             return 1.0
-        min_d = 1.0
-        for i in range(n):
-            for j in range(i + 1, n):
-                d = hamming_distance(population[i], population[j])
-                if d < min_d:
-                    min_d = d
-        return min_d
+        pw = _pairwise_matrix(population)
+        i_upper, j_upper = np.triu_indices(n, k=1)
+        return float(pw[i_upper, j_upper].min())
 
     def _max_hamming(self, population: List[Chromosome]) -> float:
         n = len(population)
         if n < 2:
             return 0.0
-        max_d = 0.0
-        for i in range(n):
-            for j in range(i + 1, n):
-                d = hamming_distance(population[i], population[j])
-                if d > max_d:
-                    max_d = d
-        return max_d
+        pw = _pairwise_matrix(population)
+        i_upper, j_upper = np.triu_indices(n, k=1)
+        return float(pw[i_upper, j_upper].max())
 
     def summary(self) -> dict:
         """Return diversity history summary for HTML report."""

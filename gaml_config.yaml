@@ -101,6 +101,12 @@ genetic:
   # Probability that two parents exchange genes vs. direct clone.
   crossover_rate: 0.70
 
+  # Crossover operator used to breed offspring.
+  #   uniform     — each gene independently drawn from either parent (p=0.5).
+  #                 Better exploration across the full gene space (default).
+  #   single_point — split gene list at one random cut point.
+  crossover_type: uniform
+
   # Fraction of the best individuals preserved unchanged each generation.
   # 0.10 = top 10% survive without modification.
   elite_ratio: 0.10
@@ -126,6 +132,18 @@ genetic:
   adaptive_mutation_stagnation_rounds: 3  # stagnant gens before boost fires
   adaptive_mutation_boost_factor: 2.5     # mutation_rate x this factor when boosted
   adaptive_mutation_decay: 0.85           # per-gen decay back toward base rate
+
+  # Fitness stability penalty: penalise chromosomes whose CV scores vary
+  # widely across folds.  fitness = mean_cv - penalty * std_cv
+  # 0.0 = pure mean (no penalty). 0.5 = moderate penalty (default).
+  # Higher values (e.g. 1.0) strongly favour consistent pipelines.
+  fitness_std_penalty: 0.5
+
+  # Parallel chromosome evaluation.
+  # 1  = sequential, safe for all backends (default).
+  # -1 = use all CPU cores. Recommended for the sklearn backend only —
+  #      AutoGluon manages its own thread pool and can oversubscribe with n_jobs != 1.
+  n_jobs: 1
 
   random_seed: 42
 
