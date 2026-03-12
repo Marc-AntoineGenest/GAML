@@ -1,25 +1,21 @@
 """
-WarmStart
----------
-Produces a pre-screened initial population rather than starting from pure random.
+WarmStart — builds a pre-screened initial population for generation 0.
 
 Two strategies are combined:
 
-Strategy A — Default config seeding
-    Three hand-crafted archetypes are injected into gen-0:
-      - sklearn_baseline  : median imputer, standard scaler, onehot. Reliable on clean data.
-      - robust_tabular    : robust scaler, IQR outlier, yeo-johnson. Handles messy real-world data.
-      - tree_friendly     : no scaling, ordinal, knn imputer. Optimal for GBM/RF.
+Strategy A — Archetype seeding
+    Up to three hand-crafted chromosomes are injected at the start:
+      sklearn_baseline : median imputer, standard scaler, onehot encoding.
+      robust_tabular   : robust scaler, IQR outlier handling, yeo-johnson.
+      tree_friendly    : no scaling, ordinal encoding, knn imputer.
 
-Strategy B — Successive Halving pre-screen
-    Generates pool_ratio × population_size random candidates, evaluates each with a
-    fast 80/20 split, and keeps the top fraction as gen-0 survivors.
-    Resets their fitness to None so the GA re-evaluates them with full CV.
+Strategy B — Successive halving pre-screen
+    A pool of random candidates is generated and evaluated with a fast 80/20
+    split. The top fraction survive into generation 0. Their fitness is reset
+    so the GA re-evaluates them with full CV on equal footing.
 
-Combined gen-0:
-    ┌── n_seeds default configs   (Strategy A)
-    ├── n_survivors from halving  (Strategy B)
-    └── remainder random          (diversity)
+Generation 0 composition:
+    n_seeds archetypes  +  halving survivors  +  random fill
 """
 
 from __future__ import annotations
@@ -39,10 +35,6 @@ from genetic_automl.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Default seed configurations
-# ---------------------------------------------------------------------------
 
 def _sklearn_baseline(backend: str) -> Dict[str, Any]:
     base = {
@@ -95,22 +87,20 @@ def _tree_friendly(backend: str) -> Dict[str, Any]:
 _DEFAULT_SEEDS = [_sklearn_baseline, _robust_tabular, _tree_friendly]
 
 
-# ---------------------------------------------------------------------------
-# WarmStart
-# ---------------------------------------------------------------------------
-
 class WarmStart:
     """
     Parameters
     ----------
     backend : str
     n_default_seeds : int
-        Archetype configs injected into gen-0 (max 3).
+        Number of archetype chromosomes to inject (max 3).
     halving_pool_ratio : float
-        Pool size = ratio × population_size. Set 0 to disable.
+        Pool size = ratio × population_size. Set 0 to disable halving.
     halving_keep_ratio : float
-        Fraction of pool kept as survivors.
+        Fraction of the pool kept after halving.
     random_seed : int
+    gene_space : list | None
+        Pre-built gene space. None = use default for backend.
     """
 
     def __init__(
@@ -128,7 +118,7 @@ class WarmStart:
         self.halving_keep_ratio = halving_keep_ratio
         self.random_seed = random_seed
         self._rng = random.Random(random_seed)
-        self._gene_space = gene_space  # None → default space used by random_population
+        self._gene_space = gene_space
 
     def build_initial_population(
         self,
@@ -140,12 +130,10 @@ class WarmStart:
         """Build a warm-started initial population of population_size individuals."""
         population: List[Chromosome] = []
 
-        # Strategy A: inject default seeds
         seeds = self._build_default_seeds()
         population.extend(seeds[:self.n_default_seeds])
-        log.info("WarmStart: injected %d default seed configs", len(population))
+        log.info("WarmStart: injected %d archetype configs", len(population))
 
-        # Strategy B: halving pre-screen
         survivors = []
         if self.halving_pool_ratio > 0 and evaluator is not None:
             n_pool = max(1, int(population_size * self.halving_pool_ratio) - len(population))
@@ -158,14 +146,13 @@ class WarmStart:
                     existing.add(str(s.genes))
             log.info("WarmStart: added %d halving survivors (pool=%d)", len(survivors), n_pool)
 
-        # Fill remainder with random individuals
         n_random = population_size - len(population)
         if n_random > 0:
             population.extend(random_population(self.backend, n_random, self._rng, generation=0, gene_space=self._gene_space))
             log.info("WarmStart: filled %d random individuals", n_random)
 
         log.info(
-            "WarmStart ready | seeds=%d | survivors=%d | random=%d | total=%d",
+            "WarmStart ready | archetypes=%d | survivors=%d | random=%d | total=%d",
             self.n_default_seeds, len(survivors), n_random, len(population),
         )
         return population[:population_size]
@@ -189,7 +176,7 @@ class WarmStart:
         X_train: pd.DataFrame,
         y_train: pd.Series,
     ) -> List[Chromosome]:
-        """Evaluate n_pool candidates with a fast 80/20 split, return top n_keep."""
+        """Evaluate n_pool random candidates with an 80/20 split; return top n_keep."""
         from sklearn.model_selection import train_test_split as _tts
         from genetic_automl.core.problem import fitness_sign, compute_metric
         from genetic_automl.preprocessing.pipeline import PreprocessingConfig, PreprocessingPipeline
@@ -209,7 +196,7 @@ class WarmStart:
 
         pool = random_population(self.backend, n_pool, self._rng, generation=0, gene_space=self._gene_space)
         sign = fitness_sign(evaluator.metric)
-        log.info("WarmStart halving: evaluating %d candidates…", n_pool)
+        log.info("WarmStart halving: evaluating %d candidates", n_pool)
 
         for chrom in pool:
             try:
@@ -245,7 +232,6 @@ class WarmStart:
             evaluated[0].fitness if evaluated else float("nan"),
         )
 
-        # Reset fitness — GA will re-evaluate with full CV
         for s in evaluated:
             s.fitness = None
         return evaluated

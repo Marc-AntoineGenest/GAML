@@ -1,6 +1,6 @@
 # GAML — Architecture Reference
 
-Developer documentation. For usage, see [README.md](README.md).
+For usage, see [README.md](README.md).
 
 ---
 
@@ -13,27 +13,27 @@ genetic_automl/
 ├── config_loader.py            # load_config() — parses gaml_config.yaml
 │
 ├── core/
-│   ├── problem.py              # ProblemType enum, metric registry, pareto_front
+│   ├── problem.py              # ProblemType enum, metric registry
 │   ├── data.py                 # DataManager — 3-way stratified split
-│   └── base_automl.py          # BaseAutoML abstract contract
+│   └── base_automl.py          # BaseAutoML abstract interface
 │
 ├── automl/
-│   ├── sklearn_model.py        # Lightweight sklearn GradientBoosting backend
+│   ├── sklearn_model.py        # sklearn GradientBoosting backend
 │   └── autogluon_model.py      # AutoGluon backend (optional)
 │
 ├── genetic/
 │   ├── chromosome.py           # Gene space, Chromosome dataclass, random_population
-│   ├── operators.py            # crossover, mutation, tournament_selection, elites
+│   ├── operators.py            # crossover, mutation, tournament selection, elites
 │   ├── fitness.py              # FitnessEvaluator — k-fold CV per chromosome
 │   ├── engine.py               # GeneticEngine — full evolution loop
-│   ├── warm_start.py           # WarmStart — default seeds + halving pre-screen
+│   ├── warm_start.py           # WarmStart — archetype seeding + halving pre-screen
 │   └── diversity.py            # PopulationDiversity — Hamming tracking + injection
 │
 ├── preprocessing/
 │   ├── pipeline.py             # PreprocessingPipeline — orchestrates all steps
 │   ├── numeric_imputer.py      # mean / median / knn / iterative / constant
 │   ├── outlier_handler.py      # IQR / zscore / IsolationForest
-│   ├── correlation_filter.py   # Drop highly correlated features
+│   ├── correlation_filter.py   # Drops highly correlated feature pairs
 │   ├── categorical_encoder.py  # onehot / ordinal / target / binary
 │   ├── distribution_transform.py  # yeo-johnson / box-cox / log1p
 │   ├── scaler.py               # standard / minmax / robust / none
@@ -61,29 +61,30 @@ DataManager.three_way_split()
       │
       ├── Train (67%) ──► GeneticEngine.run()
       │                         │
-      │                    Gen-0: WarmStart (default seeds + halving pre-screen)
+      │                    Gen 0: WarmStart (archetypes + halving pre-screen)
       │                         │
       │                    Per generation:
-      │                      1. FitnessEvaluator  (k-fold CV — test never seen)
-      │                      2. PopulationDiversity (Hamming distance tracking)
-      │                      3. Update no_improvement_streak
-      │                      4. Diversity injection if population collapsed
-      │                      5. Adaptive mutation boost if stagnating
-      │                      6. Breed next generation
+      │                      1. FitnessEvaluator  (k-fold CV on train only)
+      │                      2. Compute generation stats
+      │                      3. Update no-improvement streak
+      │                      4. PopulationDiversity: inject if Hamming < threshold
+      │                      5. Adaptive mutation boost / decay
+      │                      6. Early stopping check
+      │                      7. Breed next generation
       │                         │
       │                    Best chromosome
       │                         │
-      ├── Val  (17%) ──────────► Refit PreprocessingPipeline on train+val
-      │                          Retrain Model on preprocessed train+val
+      ├── Val  (17%) ──────────► Refit PreprocessingPipeline on train + val
+      │                          Retrain model on preprocessed train + val
       │
-      └── Test (15%) ──► Final score (NEVER touched during GA) ──► HTML Report
+      └── Test (15%) ──► Final score (never touched during GA) ──► HTML report
 ```
 
 ---
 
 ## Zero-leakage guarantee
 
-`FitnessEvaluator` creates a **fresh** `PreprocessingPipeline` for every (chromosome, fold) pair. All preprocessing steps fit only on the fold's training portion. Val/test data is only passed to `transform()`, never to `fit()`.
+`FitnessEvaluator` creates a **fresh** `PreprocessingPipeline` for every (chromosome, fold) pair. All fit steps see only the fold's training portion. Val and test data only ever pass through `transform()`, never `fit()`.
 
 ---
 
@@ -95,19 +96,20 @@ Each chromosome is a flat dict of 15 genes (sklearn backend):
 
 **Model genes (3, sklearn):** `n_estimators`, `max_depth`, `learning_rate`
 
-The candidate values for each gene are defined in `genetic/chromosome.py` and can be overridden at runtime via `gaml_config.yaml` → `load_config()` → `AutoMLPipeline(gene_space_overrides=...)`.
+Candidate values are defined in `genetic/chromosome.py` and overridden at runtime via `gaml_config.yaml` → `load_config()` → `AutoMLPipeline(gene_space_overrides=...)`.
 
 ---
 
-## Roadmap
+## Key design decisions
 
-| Priority | Improvement | Impact | Effort |
-|---|---|---|---|
-| 1 | Parallel fitness eval (`joblib.Parallel`) | Very High | Low |
-| 2 | Successive Halving fitness schedule (n_folds=1→2→3 across gens) | Very High | Low |
-| 3 | Fitness evaluation LRU cache | High | Low |
-| 4 | `fitness_std` penalty: `fitness = mean_cv - α * std_cv` | Medium | Trivial |
-| 5 | Switch default crossover to `uniform_crossover` | Medium | Trivial |
-| 6 | Surrogate fitness model (RF on genes→fitness after gen 3) | High | Medium |
-| 7 | Optuna/BOHB for continuous model hyperparams | High | Medium |
-| 8 | Island model GA (structural diversity) | Medium | High |
+**Why k-fold CV instead of a single val split?**
+Prevents the GA from exploiting a lucky split. Fitness signal is less noisy, leading to genuinely better-performing configurations.
+
+**Why Hamming distance for diversity?**
+The gene space is categorical and discrete. Hamming distance (fraction of genes that differ) is the natural metric. Values range from 0 (identical) to 1 (every gene differs).
+
+**Why warm-start archetypes?**
+Three hand-crafted chromosomes representing common real-world patterns (clean data, messy tabular data, tree-friendly) avoid wasting early generations on obviously poor configs.
+
+**Fitness stability penalty**
+`fitness = mean_cv - penalty × std_cv` penalises chromosomes whose CV scores vary widely across folds. This favours pipelines that are consistently good rather than occasionally excellent.

@@ -1,24 +1,24 @@
 # GAML — Genetic AutoML
 
-A genetic algorithm that simultaneously evolves **preprocessing pipelines** and **model hyperparameters** for tabular data. Every combination is scored with cross-validation; the best pipeline is automatically selected and refit on your full dataset.
+A genetic algorithm that simultaneously searches over **preprocessing pipelines** and **model hyperparameters** for tabular data. Every candidate is scored with cross-validation; the best configuration is automatically selected and refit on your full dataset.
 
 ---
 
 ## Installation
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/Marc-AntoineGenest/GAML.git
 cd GAML
 pip install -e .
+pip install pyyaml   # required to use gaml_config.yaml
 ```
 
 **Optional extras:**
 
 ```bash
-pip install -e ".[autogluon]"   # AutoGluon backend (more powerful models)
-pip install -e ".[imbalanced]"  # SMOTE / imbalanced-learn sampling
+pip install -e ".[autogluon]"   # AutoGluon backend (more powerful, slower)
+pip install -e ".[imbalanced]"  # SMOTE / imbalanced-learn sampling methods
 pip install -e ".[reporting]"   # MLflow experiment tracking
-pip install pyyaml              # required to use gaml_config.yaml
 ```
 
 **Run tests:**
@@ -29,11 +29,11 @@ pytest genetic_automl/tests/ -v
 
 ---
 
-## Quick Start
+## Quick start
 
-### Option 1 — Edit the config file (recommended)
+### Option A — YAML config (recommended)
 
-Open `gaml_config.yaml` at the project root and set your target column, problem type, and search space. Then run:
+Edit `gaml_config.yaml` at the project root, then:
 
 ```python
 import pandas as pd
@@ -45,13 +45,13 @@ config, gene_overrides = load_config("gaml_config.yaml")
 pipeline = AutoMLPipeline(config, gene_space_overrides=gene_overrides)
 pipeline.fit(df)
 
-print(f"Best score: {pipeline.final_score:.4f}")
+print(f"Test score: {pipeline.final_score:.4f}")
 print(f"Report:     {pipeline.report_path}")
 
 predictions = pipeline.predict(df)
 ```
 
-### Option 2 — Pure Python
+### Option B — Pure Python
 
 ```python
 import pandas as pd
@@ -61,11 +61,7 @@ from genetic_automl.core.problem import ProblemType
 config = PipelineConfig(
     problem_type=ProblemType.CLASSIFICATION,
     target_column="label",
-    genetic=GeneticConfig(
-        population_size=20,
-        generations=15,
-        n_cv_folds=3,
-    ),
+    genetic=GeneticConfig(population_size=20, generations=15),
     automl=AutoMLConfig(backend="sklearn"),
 )
 
@@ -76,32 +72,46 @@ predictions = pipeline.predict(new_df)
 
 ---
 
+## Saving and loading
+
+```python
+# Save after fitting
+pipeline.save("models/my_pipeline.joblib")
+
+# Load later — no re-fitting needed
+from genetic_automl import AutoMLPipeline
+pipeline = AutoMLPipeline.load("models/my_pipeline.joblib")
+predictions = pipeline.predict(df)
+```
+
+---
+
 ## Configuration (`gaml_config.yaml`)
 
-`gaml_config.yaml` at the project root is the single place to control everything. It has five sections:
+The YAML file is the single place to control everything without touching Python code.
 
-### A — Run settings
+### Run settings
 
 ```yaml
 run:
   problem_type: classification   # classification | regression
   target_column: target          # column name in your DataFrame
   backend: sklearn               # sklearn | autogluon
-  metric: null                   # null = default (f1_macro / mse)
+  metric: null                   # null = default (f1_macro for clf, mse for reg)
 ```
 
-### B — Data settings
+### Data settings
 
 ```yaml
 data:
-  test_size: 0.15    # locked test set fraction (never seen by GA)
-  val_size: 0.20     # validation fraction for final refit
+  test_size: 0.15    # fraction locked as the final test set (never seen by the GA)
+  val_size: 0.20     # validation fraction used during the final refit
   stratify: true     # stratified splits (classification only)
 ```
 
-### C — Genetic algorithm settings
+### Genetic algorithm settings
 
-| Parameter | Default | What it controls |
+| Parameter | Default | Description |
 |---|---|---|
 | `population_size` | 20 | Pipeline configs evaluated per generation. Larger = broader search, slower. |
 | `generations` | 15 | Maximum evolution cycles. |
@@ -109,71 +119,72 @@ data:
 | `early_stopping_rounds` | 5 | Stop if no improvement for N generations. |
 | `mutation_rate` | 0.20 | Probability a gene changes value each reproduction. |
 | `crossover_rate` | 0.70 | Probability two parents recombine vs. clone. |
+| `crossover_type` | uniform | `uniform` or `single_point`. |
 | `elite_ratio` | 0.10 | Fraction of top individuals kept unchanged. |
-| `warm_start` | true | Seed generation-0 with known-good configs. |
-| `adaptive_mutation` | true | Boost mutation when stagnating, decay on improvement. |
+| `warm_start` | true | Seed generation 0 with known-good archetype configs. |
+| `adaptive_mutation` | true | Boost mutation rate on stagnation, decay on improvement. |
 | `diversity_threshold` | 0.15 | Mean Hamming distance below which fresh individuals are injected. |
+| `fitness_std_penalty` | 0.5 | Penalises unstable pipelines: `fitness = mean_cv - penalty × std_cv`. |
+| `n_jobs` | 1 | Parallel workers. Use `-1` for all cores (sklearn backend only). |
 
-### D — Search space (what gets optimized)
+### Search space
 
-This is where you tell GAML which parameter values to explore. Each entry is a list of candidates. **Use a single-element list to fix a parameter** and remove it from the search.
+This controls which parameter values the GA is allowed to explore. Use a single-element list to fix a parameter.
 
 ```yaml
 preprocessing_search_space:
   scaler: [standard]              # fixed — always use standard scaling
   numeric_imputer: [mean, median] # search between mean and median only
-  outlier_method: [none]          # disabled — skip outlier detection
+  outlier_method: [none]          # disabled
 ```
 
-Full preprocessing search space options:
+Full preprocessing gene options:
 
-| Gene | Options | Description |
-|---|---|---|
-| `numeric_imputer` | `mean` `median` `knn` `iterative` `constant` | Fill missing numeric values |
-| `outlier_method` | `none` `iqr` `zscore` `isolation_forest` | Detect and handle outliers |
-| `outlier_threshold` | `1.5` `2.0` `3.0` | IQR multiplier or z-score cutoff |
-| `outlier_action` | `clip` `flag` | Clamp outliers or add indicator column |
-| `correlation_threshold` | `null` `0.85` `0.90` `0.95` | Drop correlated features (`null` = disabled) |
-| `categorical_encoder` | `onehot` `ordinal` `target` `binary` | Encode categorical columns |
-| `distribution_transform` | `none` `yeo-johnson` `box-cox` `log1p` | Reduce skewness before scaling |
-| `scaler` | `none` `standard` `minmax` `robust` | Normalize feature magnitudes |
-| `missing_indicator` | `true` `false` | Add binary flags for originally-missing values |
-| `feature_selection_method` | `none` `variance_threshold` `mutual_info` `rfe` | Drop low-value features |
-| `feature_selection_k` | `0.50` `0.75` `1.0` | Fraction of features to keep |
-| `imbalance_method` | `none` `smote` `borderline_smote` `adasyn` `class_weight` | Handle class imbalance |
+| Gene | Options |
+|---|---|
+| `numeric_imputer` | `mean` `median` `knn` `iterative` `constant` |
+| `outlier_method` | `none` `iqr` `zscore` `isolation_forest` |
+| `outlier_threshold` | `1.5` `2.0` `3.0` |
+| `outlier_action` | `clip` `flag` |
+| `correlation_threshold` | `null` `0.85` `0.90` `0.95` |
+| `categorical_encoder` | `onehot` `ordinal` `target` `binary` |
+| `distribution_transform` | `none` `yeo-johnson` `box-cox` `log1p` |
+| `scaler` | `none` `standard` `minmax` `robust` |
+| `missing_indicator` | `true` `false` |
+| `feature_selection_method` | `none` `variance_threshold` `mutual_info` `rfe` |
+| `feature_selection_k` | `0.50` `0.75` `1.0` |
+| `imbalance_method` | `none` `smote` `borderline_smote` `adasyn` `class_weight` |
 
-sklearn model search space:
+sklearn model gene options:
 
-| Gene | Options | Description |
-|---|---|---|
-| `n_estimators` | `50` `100` `200` `300` `500` | Number of boosting trees |
-| `max_depth` | `2` `3` `4` `5` `6` `8` | Maximum tree depth |
-| `learning_rate` | `0.01` `0.05` `0.1` `0.2` | Shrinkage applied per tree |
+| Gene | Options |
+|---|---|
+| `n_estimators` | `50` `100` `200` `300` `500` |
+| `max_depth` | `2` `3` `4` `5` `6` `8` |
+| `learning_rate` | `0.01` `0.05` `0.1` `0.2` |
 
-### E — Reporting
+### Reporting
 
 ```yaml
 report:
-  output_dir: reports              # HTML report and JSON export location
-  mlflow_tracking_uri: mlflow_runs # MLflow tracking store (null = disabled)
-  open_html_on_finish: false       # open browser automatically on completion
+  output_dir: reports
+  mlflow_tracking_uri: mlflow_runs   # set to null to disable MLflow
+  open_html_on_finish: false
 ```
 
 ---
 
 ## Outputs
 
-After `pipeline.fit(df)`:
-
-| Output | How to access |
+| Attribute | Description |
 |---|---|
-| Best test score | `pipeline.final_score` |
-| HTML report path | `pipeline.report_path` |
-| Evolution history | `pipeline.history` |
-| Best preprocessor | `pipeline.best_preprocessor` |
-| Best model | `pipeline.best_model` |
-| Predictions | `pipeline.predict(df)` |
-| Probabilities | `pipeline.predict_proba(df)` (classification) |
+| `pipeline.final_score` | Test set score (metric depends on problem type) |
+| `pipeline.report_path` | Path to the generated HTML report |
+| `pipeline.history` | Full evolution history (fitness curve, diversity, etc.) |
+| `pipeline.best_preprocessor` | Fitted PreprocessingPipeline |
+| `pipeline.best_model` | Fitted AutoML model |
+| `pipeline.predict(df)` | Predictions on new data |
+| `pipeline.predict_proba(df)` | Class probabilities (classification only) |
 
 The HTML report includes a generation-by-generation fitness curve, diversity tracking, the best chromosome's gene values, and the final test score.
 
@@ -181,30 +192,22 @@ The HTML report includes a generation-by-generation fitness curve, diversity tra
 
 ## Preprocessing step order
 
-Steps always execute in this fixed order. GAML evolves **which option** to use at each step, not the order itself.
+GAML always applies preprocessing in this fixed order. The GA evolves which option to use at each step, not the order itself.
 
 ```
 1. NumericImputer         — fill NaN before anything else
-2. OutlierHandler         — on clean data, before scaling distorts distances
-3. CorrelationFilter      — after imputation, correlation stats are reliable
+2. OutlierHandler         — on clean numeric data, before scaling
+3. CorrelationFilter      — reliable stats after imputation
 4. CategoricalEncoder     — encode before scaling
 5. DistributionTransform  — reduce skewness before scaling
 6. Scaler                 — after all columns are numeric
-7. MissingIndicator       — add binary flags for originally-missing columns
+7. MissingIndicator       — binary flags for originally-missing columns
 8. FeatureSelector        — on fully preprocessed data
-9. ImbalanceHandler       — always last, train set only
+9. ImbalanceHandler       — always last, training data only
 ```
 
 ---
 
-## Development
+## Architecture
 
-For architecture details, internal design notes, and the improvement roadmap see [`ARCHITECTURE.md`](ARCHITECTURE.md).
-
-```bash
-# Run full test suite
-pytest genetic_automl/tests/ -v
-
-# Run extended regression tests
-pytest genetic_automl/tests/test_extended.py -v
-```
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for module layout, execution flow, and the zero-leakage guarantee.

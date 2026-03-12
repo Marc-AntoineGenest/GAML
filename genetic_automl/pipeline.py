@@ -2,13 +2,13 @@
 AutoMLPipeline — top-level entry point.
 
 Execution flow:
-  1. DataManager.validate() + three_way_split()  →  train / val / test
-  2. GeneticEngine.run()  →  evolve preprocessing + model config via k-fold CV
+  1. DataManager: validate and 3-way split into train / val / test
+  2. GeneticEngine: evolve preprocessing + model config via k-fold CV on train
   3. Refit best preprocessor on train + val
   4. Retrain best model on preprocessed train + val
-  5. Final evaluation on test set
-  6. MLflow logging + JSON export
-  7. HTML report generation
+  5. Evaluate on the locked test set
+  6. Log to MLflow and export JSON
+  7. Generate HTML report
 """
 
 from __future__ import annotations
@@ -43,24 +43,20 @@ class AutoMLPipeline:
     Parameters
     ----------
     config : PipelineConfig
-        Pipeline configuration. Build via :func:
-        to read from gaml_config.yaml, or construct manually.
+        Build with load_config("gaml_config.yaml") or construct manually.
     gene_space_overrides : dict, optional
-        {gene_name: [candidate_values]} overrides returned by
-        :func:. Skipped if not provided.
+        {gene_name: [candidate_values]} overrides returned by load_config().
 
-    Usage (YAML-driven, recommended)
-    ----------------------------------
-    ::
+    Examples
+    --------
+    YAML-driven (recommended)::
 
         from genetic_automl import load_config, AutoMLPipeline
         config, overrides = load_config("gaml_config.yaml")
         pipeline = AutoMLPipeline(config, overrides)
         pipeline.fit(df)
 
-    Usage (code-only)
-    -----------------
-    ::
+    Code-only::
 
         pipeline = AutoMLPipeline(PipelineConfig(...))
         pipeline.fit(df)
@@ -79,13 +75,8 @@ class AutoMLPipeline:
         self._history: Optional[EvolutionHistory] = None
         self._report_path: Optional[str] = None
         self._final_score: Optional[float] = None
-        # Respect explicit metric set via load_config() / gaml_config.yaml
         metric_override = getattr(config, "_metric_override", None)
         self._metric_name: str = metric_override or get_default_metric(config.problem_type)
-
-    # ------------------------------------------------------------------
-    # Public interface
-    # ------------------------------------------------------------------
 
     def fit(
         self,
@@ -108,7 +99,6 @@ class AutoMLPipeline:
         log.info("AutoMLPipeline.fit() | run=%s | backend=%s", cfg.run_name, cfg.automl.backend)
         log.info("=" * 60)
 
-        # ── 1. Data ────────────────────────────────────────────────────
         self._data_manager = DataManager(
             target_column=cfg.target_column,
             problem_type=cfg.problem_type,
@@ -127,7 +117,6 @@ class AutoMLPipeline:
         X_test  = self._data_manager.features(test_split)
         y_test  = self._data_manager.labels(test_split)
 
-        # ── 2. Genetic search (k-fold CV on X_train only) ─────────────
         evaluator = FitnessEvaluator(
             problem_type=cfg.problem_type,
             target_column=cfg.target_column,
@@ -146,8 +135,7 @@ class AutoMLPipeline:
         best_chrom = engine.run(X_train, y_train)
         self._history = engine.history
 
-        # ── 3. Refit best preprocessing on train + val ────────────────
-        log.info("Refitting best preprocessing on train + val…")
+        log.info("Refitting best preprocessing on train + val")
         X_dev = pd.concat([X_train, X_val], ignore_index=True)
         y_dev = pd.concat([y_train, y_val], ignore_index=True)
 
@@ -161,8 +149,7 @@ class AutoMLPipeline:
         X_dev_pp, y_dev_pp = self._best_preprocessor.fit_transform_train(X_dev, y_dev)
         X_test_pp = self._best_preprocessor.transform(X_test)
 
-        # ── 4. Retrain best model on preprocessed train + val ─────────
-        log.info("Retraining best model on preprocessed train+val…")
+        log.info("Retraining best model on preprocessed train + val")
         self._best_model = build_automl(
             backend=cfg.automl.backend,
             problem_type=cfg.problem_type,
@@ -173,14 +160,12 @@ class AutoMLPipeline:
         )
         self._best_model.fit(X_dev_pp, y_dev_pp, None, None)
 
-        # ── 5. Final evaluation on locked test set ────────────────────
         self._final_score = self._best_model.score(X_test_pp, y_test, metric=self._metric_name)
         log.info(
             "Final test %s: %.6f | elapsed: %.1fs",
             self._metric_name, self._final_score, time.perf_counter() - t0,
         )
 
-        # ── 6. MLflow logging ─────────────────────────────────────────
         os.makedirs(cfg.report.output_dir, exist_ok=True)
         mlflow_logger = MLflowLogger(
             tracking_uri=cfg.report.mlflow_tracking_uri,
@@ -190,7 +175,6 @@ class AutoMLPipeline:
         json_path = os.path.join(cfg.report.output_dir, f"run_{cfg.run_id}.json")
         mlflow_logger.save_json(self._history, json_path)
 
-        # ── 7. HTML report ────────────────────────────────────────────
         reporter = HTMLReporter(output_dir=cfg.report.output_dir)
         self._report_path = reporter.generate(
             config=cfg,
@@ -204,30 +188,24 @@ class AutoMLPipeline:
         log.info("Report: %s", self._report_path)
         return self
 
-    # ------------------------------------------------------------------
-
     def predict(self, df: pd.DataFrame) -> np.ndarray:
-        """Preprocess then predict."""
+        """Preprocess and return predictions."""
         self._check_fitted()
         X = self._drop_target_if_present(df)
         return self._best_model.predict(self._best_preprocessor.transform(X))
 
     def predict_proba(self, df: pd.DataFrame) -> Optional[np.ndarray]:
-        """Preprocess then predict class probabilities (classification only)."""
+        """Preprocess and return class probabilities (classification only)."""
         self._check_fitted()
         X = self._drop_target_if_present(df)
         return self._best_model.predict_proba(self._best_preprocessor.transform(X))
 
     def score(self, df: pd.DataFrame, metric: Optional[str] = None) -> float:
-        """Preprocess then evaluate the final model."""
+        """Preprocess and evaluate the final model on df."""
         self._check_fitted()
         X = self._data_manager.features(df)
         y = self._data_manager.labels(df)
         return self._best_model.score(self._best_preprocessor.transform(X), y, metric=metric)
-
-    # ------------------------------------------------------------------
-    # Properties
-    # ------------------------------------------------------------------
 
     @property
     def best_model(self) -> Optional[BaseAutoML]:
@@ -249,25 +227,19 @@ class AutoMLPipeline:
     def final_score(self) -> Optional[float]:
         return self._final_score
 
-    # ------------------------------------------------------------------
-
     def save(self, path: str) -> str:
         """
-        Persist the fitted pipeline to disk.
-
-        Saves the preprocessor, model, config, and metric name using joblib.
-        The saved file can be reloaded with :meth:`AutoMLPipeline.load`.
+        Persist the fitted pipeline to disk using joblib.
 
         Parameters
         ----------
         path : str
-            File path to write (e.g. ``"my_pipeline.joblib"``).
-            The ``.joblib`` extension is recommended but not enforced.
+            File path to write. The .joblib extension is recommended.
 
         Returns
         -------
         str
-            The resolved absolute path of the saved file.
+            Resolved absolute path of the saved file.
 
         Raises
         ------
@@ -290,20 +262,13 @@ class AutoMLPipeline:
     @classmethod
     def load(cls, path: str) -> "AutoMLPipeline":
         """
-        Reload a pipeline that was saved with :meth:`save`.
-
-        The returned pipeline is ready to call :meth:`predict`,
-        :meth:`predict_proba`, and :meth:`score` immediately — no
-        re-fitting required.
+        Reload a pipeline saved with save(). Ready for predict() immediately
+        — no re-fitting required.
 
         Parameters
         ----------
         path : str
-            Path to a file previously written by :meth:`save`.
-
-        Returns
-        -------
-        AutoMLPipeline
+            Path to a file previously written by save().
         """
         payload = _jload(path)
         instance = cls.__new__(cls)
@@ -318,8 +283,6 @@ class AutoMLPipeline:
         instance._metric_name = payload["metric_name"]
         log.info("Pipeline loaded from %s", os.path.abspath(path))
         return instance
-
-    # ------------------------------------------------------------------
 
     def _check_fitted(self) -> None:
         if self._best_model is None:

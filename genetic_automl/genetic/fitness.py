@@ -1,23 +1,16 @@
 """
-FitnessEvaluator
-----------------
-Evaluates a Chromosome using k-fold cross-validation on the training set,
-returning the mean CV score as fitness.
+FitnessEvaluator — scores a Chromosome via k-fold cross-validation.
 
-Why k-fold instead of a single val split:
-  - Prevents the GA from exploiting a lucky val split
-  - Fitness signal is less noisy — GA converges to genuinely good configs
-  - The test set remains completely untouched until final evaluation
-
-Zero-leakage per fold:
-  - PreprocessingPipeline is fit fresh on each fold's train portion
-  - No data from the validation fold touches any fit step
-  - ImbalanceHandler is applied only to the fold's training portion
-
-The GA always *maximizes* fitness:
-  - Classification metrics (F1, accuracy, AUC) → returned as-is
-  - Regression metrics (MSE, MAE) → negated
-  - Multi-objective → weighted scalarization
+Design principles:
+  - Zero leakage: PreprocessingPipeline is fit fresh on each fold's train split.
+    Val/test data only ever sees transform(), never fit().
+  - ImbalanceHandler is applied to fold training data only.
+  - The GA always maximises fitness:
+      classification metrics (F1, accuracy, AUC) — returned as-is
+      regression metrics (MSE, MAE)              — negated
+  - Chromosomes with identical genes reuse a cached result (no redundant CV).
+  - Fitness includes a configurable std penalty to favour stable pipelines:
+      fitness = mean_cv - penalty * std_cv
 """
 
 from __future__ import annotations
@@ -41,25 +34,16 @@ from genetic_automl.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-# Genes that belong to the preprocessing layer (not forwarded to the AutoML model)
 _PREPROCESSING_GENE_KEYS = {
-    "numeric_imputer",
-    "outlier_method",
-    "outlier_threshold",
-    "outlier_action",
-    "correlation_threshold",
-    "categorical_encoder",
-    "distribution_transform",
-    "scaler",
-    "missing_indicator",
-    "feature_selection_method",
-    "feature_selection_k",
-    "imbalance_method",
+    "numeric_imputer", "outlier_method", "outlier_threshold", "outlier_action",
+    "correlation_threshold", "categorical_encoder", "distribution_transform",
+    "scaler", "missing_indicator", "feature_selection_method",
+    "feature_selection_k", "imbalance_method",
 }
 
 
 def _split_genes(genes: dict):
-    """Split chromosome genes into preprocessing genes and model genes."""
+    """Partition chromosome genes into preprocessing genes and model genes."""
     pp_genes = {k: v for k, v in genes.items() if k in _PREPROCESSING_GENE_KEYS}
     model_genes = {k: v for k, v in genes.items() if k not in _PREPROCESSING_GENE_KEYS}
     return pp_genes, model_genes
@@ -75,10 +59,11 @@ class FitnessEvaluator:
     target_column : str
     backend : str
     metric : str | None
+        Scoring metric. None = default for problem_type.
     n_folds : int
-        Number of CV folds (default 3 — balances quality vs speed in GA context).
-    multi_objective_metrics : list[str] | None
-    multi_objective_weights : list[float] | None
+        Number of CV folds. 3 is a good default for speed; use 5 for production.
+    fitness_std_penalty : float
+        Coefficient for the std penalty term. 0.0 = pure mean CV score.
     random_seed : int
     """
 
@@ -103,25 +88,21 @@ class FitnessEvaluator:
         self.multi_objective_weights = multi_objective_weights
         self.random_seed = random_seed
         self.fitness_std_penalty = fitness_std_penalty
-        # PERF-2: cache evaluated (gene_key → fitness) to skip duplicate chromosomes
         self._cache: dict = {}
         self._cache_hits: int = 0
-
-    # ------------------------------------------------------------------
 
     def evaluate(
         self,
         chromosome: Chromosome,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_val: pd.DataFrame = None,   # kept for API compat — not used in CV mode
+        X_val: pd.DataFrame = None,
         y_val: pd.Series = None,
     ) -> float:
         """
-        Evaluate via k-fold CV. Returns mean fitness across folds.
-        Returns float('-inf') on any exception.
+        Score chromosome via k-fold CV. Returns fitness (float).
+        Returns float('-inf') on failure.
         """
-        # PERF-2: return cached result for identical gene configurations
         cache_key = tuple(sorted(chromosome.genes.items()))
         if cache_key in self._cache:
             cached_fitness, cached_std = self._cache[cache_key]
@@ -146,7 +127,6 @@ class FitnessEvaluator:
                 X_fold_val   = X_train.iloc[val_idx].reset_index(drop=True)
                 y_fold_val   = y_train.iloc[val_idx].reset_index(drop=True)
 
-                # Fresh preprocessor per fold — zero leakage
                 pp_config = PreprocessingConfig.from_genes(pp_genes)
                 pp = PreprocessingPipeline(
                     config=pp_config,
@@ -182,7 +162,6 @@ class FitnessEvaluator:
                     chromosome.id, fold_idx + 1, self.n_folds, score,
                 )
 
-            # Reject chromosome if any fold failed completely
             valid = [s for s in fold_scores if s != float("-inf")]
             if not valid:
                 chromosome.fitness = float("-inf")
@@ -190,26 +169,17 @@ class FitnessEvaluator:
 
             fitness = float(np.mean(valid))
             fitness_std = float(np.std(valid)) if len(valid) > 1 else 0.0
-
-            # QUAL-1: penalise high-variance chromosomes — favour stable pipelines
             penalised_fitness = fitness - self.fitness_std_penalty * fitness_std
 
             chromosome.fitness = penalised_fitness
             chromosome.fitness_std = fitness_std
-
-            # PERF-2: cache result for future duplicate chromosomes
             self._cache[cache_key] = (penalised_fitness, fitness_std)
-
-            # Store preprocessing gene config on chromosome for lineage tracking
-            chromosome._pp_genes = pp_genes  # noqa: SLF001  # intentional dynamic attr
+            chromosome._pp_genes = pp_genes  # noqa: SLF001
 
             log.info(
                 "Chromosome %s | CV mean=%.6f | std=%.6f | penalty=%.6f | fitness=%.6f | genes=%s",
-                chromosome.id,
-                fitness,
-                fitness_std,
-                self.fitness_std_penalty * fitness_std,
-                penalised_fitness,
+                chromosome.id, fitness, fitness_std,
+                self.fitness_std_penalty * fitness_std, penalised_fitness,
                 {**pp_genes, **model_genes},
             )
             return penalised_fitness
@@ -222,10 +192,8 @@ class FitnessEvaluator:
             chromosome.fitness = float("-inf")
             return float("-inf")
 
-    # ------------------------------------------------------------------
-
     def _build_cv(self, y: pd.Series):
-        """Stratified for classification, regular KFold for regression."""
+        """Stratified KFold for classification, regular KFold for regression."""
         if self.problem_type == ProblemType.REGRESSION:
             return KFold(n_splits=self.n_folds, shuffle=True, random_state=self.random_seed)
         return StratifiedKFold(n_splits=self.n_folds, shuffle=True, random_state=self.random_seed)

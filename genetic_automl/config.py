@@ -1,6 +1,8 @@
 """
-Central configuration dataclasses for the Genetic AutoML framework.
-All tuneable knobs live here — easy to serialize to JSON/YAML.
+Configuration dataclasses for GAML.
+
+All tuneable settings live here. Construct them directly in Python or use
+load_config() to populate them from gaml_config.yaml.
 """
 
 from __future__ import annotations
@@ -13,92 +15,99 @@ from typing import Any, Dict, List, Optional
 from genetic_automl.core.problem import ProblemType
 
 
-# ---------------------------------------------------------------------------
-# Genetic algorithm hyper-parameters
-# ---------------------------------------------------------------------------
-
 @dataclass
 class GeneticConfig:
+    """Genetic algorithm settings."""
+
     population_size: int = 20
-    """Number of chromosomes (pipeline configs) per generation."""
+    """Chromosomes (pipeline configs) evaluated per generation."""
 
     generations: int = 15
-    """Maximum number of generations to evolve."""
+    """Maximum number of evolution cycles."""
 
     mutation_rate: float = 0.2
-    """Probability that any single gene mutates during reproduction."""
+    """Probability that any single gene changes value during reproduction."""
 
     crossover_rate: float = 0.7
-    """Probability that two parents produce offspring via crossover."""
+    """Probability that two parents recombine instead of cloning."""
 
     crossover_type: str = "uniform"
-    """Crossover operator. Options: 'uniform' (default), 'single_point'.
-    Uniform crossover flips each gene independently (p=0.5 per gene) — better
-    exploration across the full gene space. single_point splits at one cut."""
+    """
+    Crossover operator. Options:
+      uniform      — each gene drawn independently from either parent (p=0.5). Default.
+      single_point — genes split at one random cut point.
+    """
 
     elite_ratio: float = 0.1
     """Fraction of top individuals preserved unchanged each generation."""
 
     tournament_size: int = 3
-    """Number of candidates compared in tournament selection."""
+    """Candidates compared per tournament selection draw."""
 
     early_stopping_rounds: int = 5
-    """Stop if best fitness does not improve for this many generations."""
+    """Stop if best fitness does not improve for this many consecutive generations."""
 
     n_cv_folds: int = 3
-    """Number of cross-validation folds per chromosome evaluation. 3 balances quality vs speed."""
+    """CV folds per chromosome evaluation. 3 balances quality and speed."""
 
-    # --- Warm-start ---
+    # Warm-start
     warm_start: bool = True
-    """Whether to use warm-start population seeding (default seeds + halving pre-screen)."""
+    """Seed generation 0 with archetype configs and halving survivors."""
 
     warm_start_n_seeds: int = 3
-    """Number of default archetype configs injected into gen-0 (max 3)."""
+    """Number of archetype configs injected into generation 0 (max 3)."""
 
     warm_start_halving_pool_ratio: float = 2.0
-    """Random pool size = ratio × population_size. Pre-screened with 1-fold CV. 0 = disable."""
+    """Pool size = ratio × population_size. Set 0 to disable halving pre-screen."""
+
     warm_start_halving_keep_ratio: float = 0.5
-    """Fraction of the halving pool kept as survivors."""
+    """Fraction of the halving pool kept as generation 0 survivors."""
 
-    # --- Diversity ---
+    # Diversity
     diversity_threshold: float = 0.15
-    """Mean Hamming distance below which diversity injection is triggered."""
-    diversity_injection_ratio: float = 0.2
-    """Fraction of worst individuals replaced on injection."""
-    # --- Adaptive mutation ---
-    adaptive_mutation: bool = True
-    """Boost mutation rate when stagnation is detected, decay back on improvement."""
-    adaptive_mutation_stagnation_rounds: int = 3
-    """No-improvement generations that trigger mutation boost."""
-    adaptive_mutation_boost_factor: float = 2.5
-    """Multiply base mutation_rate by this factor on stagnation."""
-    adaptive_mutation_decay: float = 0.85
-    """Per-generation decay toward base_rate after a boost."""
+    """Mean Hamming distance below which diversity injection fires."""
 
-    # --- Fitness stability ---
+    diversity_injection_ratio: float = 0.2
+    """Fraction of worst individuals replaced on diversity injection."""
+
+    # Adaptive mutation
+    adaptive_mutation: bool = True
+    """Boost mutation rate on stagnation; decay back on improvement."""
+
+    adaptive_mutation_stagnation_rounds: int = 3
+    """No-improvement generations required to trigger a mutation boost."""
+
+    adaptive_mutation_boost_factor: float = 2.5
+    """Multiply base mutation_rate by this factor when boosting."""
+
+    adaptive_mutation_decay: float = 0.85
+    """Per-generation decay coefficient back toward the base rate after a boost."""
+
+    # Fitness
     fitness_std_penalty: float = 0.5
-    """Penalise high-variance chromosomes: fitness = mean_cv - penalty * std_cv.
-    Set to 0.0 to disable (pure mean). Higher values favour stable pipelines.
-    Typical range: 0.3 - 1.0."""
+    """
+    Stability penalty coefficient: fitness = mean_cv - penalty * std_cv.
+    0.0 = pure mean CV score. Increase to favour consistent pipelines.
+    """
+
+    # Parallelism
+    n_jobs: int = 1
+    """
+    Parallel workers for chromosome evaluation.
+    1 = sequential (default, safe for all backends).
+    -1 = all CPU cores. Use with the sklearn backend only — AutoGluon
+    manages its own thread pool and can oversubscribe when n_jobs != 1.
+    """
 
     random_seed: int = 42
 
-    # --- Parallelism ---
-    n_jobs: int = 1
-    """Number of parallel workers for chromosome fitness evaluation.
-    -1 uses all available CPU cores. 1 = sequential (default — safe for
-    AutoGluon which manages its own thread pool). Use -1 or a fixed count
-    with the sklearn backend, or when AutoGluon parallel safety is confirmed."""
-
-
-# ---------------------------------------------------------------------------
-# AutoML back-end options
-# ---------------------------------------------------------------------------
 
 @dataclass
 class AutoMLConfig:
+    """AutoML backend settings."""
+
     backend: str = "autogluon"
-    """Which AutoML backend to use. Options: 'autogluon', 'sklearn'."""
+    """Backend to use. Options: 'autogluon', 'sklearn'."""
 
     time_limit_per_eval: int = 60
     """Wall-clock seconds allowed per individual fitness evaluation."""
@@ -110,63 +119,57 @@ class AutoMLConfig:
     """Additional kwargs forwarded verbatim to the backend constructor."""
 
 
-# ---------------------------------------------------------------------------
-# Data options
-# ---------------------------------------------------------------------------
-
 @dataclass
 class DataConfig:
+    """Data split settings."""
+
     backend: str = "pandas"
-    """Data loading backend. Currently only 'pandas' is implemented."""
+    """Data loading backend. Currently only 'pandas' is supported."""
 
     test_size: float = 0.15
-    """Fraction of total data locked as final test set (never touches GA loop)."""
+    """Fraction of total data locked as the final test set (never seen by the GA)."""
 
     val_size: float = 0.2
-    """Fraction of dev data used as validation in final refit. GA itself uses k-fold CV."""
+    """Fraction of dev data used as validation during the final refit."""
 
     stratify: bool = True
-    """Stratify train/test split on the label (classification only)."""
+    """Stratify train/test splits on the label column (classification only)."""
 
     random_seed: int = 42
 
 
-# ---------------------------------------------------------------------------
-# Reporting options
-# ---------------------------------------------------------------------------
-
 @dataclass
 class ReportConfig:
+    """Reporting settings."""
+
     output_dir: str = "reports"
-    """Directory where HTML reports and MLflow artifacts are stored."""
+    """Directory where HTML reports and JSON run summaries are written."""
 
     mlflow_tracking_uri: str = "mlflow_runs"
-    """Local directory used as the MLflow tracking store."""
+    """Local MLflow tracking store directory. Set to None to disable MLflow."""
 
     open_html_on_finish: bool = False
-    """Automatically open the HTML report in the browser when done."""
+    """Open the HTML report in the default browser when the run completes."""
 
-
-# ---------------------------------------------------------------------------
-# Top-level pipeline config
-# ---------------------------------------------------------------------------
 
 @dataclass
 class PipelineConfig:
+    """Top-level pipeline configuration."""
+
     problem_type: ProblemType = ProblemType.CLASSIFICATION
-    """Classification, Regression, or MultiObjective."""
+    """Task type: CLASSIFICATION, REGRESSION, or MULTI_OBJECTIVE."""
 
     target_column: str = "target"
-    """Name of the target column in the DataFrame."""
+    """Name of the target column in the input DataFrame."""
 
     objectives: Optional[List[str]] = None
-    """For multi-objective: list of target column names."""
+    """For MULTI_OBJECTIVE: list of target column names."""
 
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     """Short unique identifier for this run (auto-generated)."""
 
     run_name: Optional[str] = None
-    """Human-friendly run name. Defaults to '<problem_type>_<run_id>'."""
+    """Human-readable run name shown in reports and MLflow. Auto-generated if None."""
 
     genetic: GeneticConfig = field(default_factory=GeneticConfig)
     automl: AutoMLConfig = field(default_factory=AutoMLConfig)

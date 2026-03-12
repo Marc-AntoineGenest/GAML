@@ -1,30 +1,23 @@
 """
-PopulationDiversity
--------------------
-Tracks genetic diversity of the population across generations and triggers
-two counter-measures when convergence is detected:
+PopulationDiversity — tracks genetic diversity and applies counter-measures
+when the population begins to converge.
+
+Two mechanisms are used:
 
 1. Diversity injection
-   When mean pairwise Hamming distance drops below *min_diversity_threshold*,
-   a fraction of the worst individuals are replaced with fresh random
-   chromosomes. This re-introduces exploration without discarding the
-   best solutions found so far (elites are never touched).
+   When mean pairwise Hamming distance drops below the threshold, a fraction
+   of the worst individuals are replaced with fresh random chromosomes. Elites
+   are never touched.
 
 2. Adaptive mutation rate
-   When no fitness improvement is seen for *stagnation_rounds* generations,
-   the mutation rate is temporarily increased by *mutation_boost_factor*
-   (e.g. 0.2 → 0.5). Once improvement resumes, the rate decays back toward
-   the original value via exponential decay.
+   When no fitness improvement is seen for several generations the mutation
+   rate is temporarily boosted. Once improvement resumes it decays back toward
+   the base rate via exponential decay.
 
-Why Hamming distance?
-   For categorical/discrete gene spaces, Hamming distance (fraction of genes
-   that differ between two chromosomes) is the natural diversity metric.
-   A distance of 0 means two chromosomes are identical; 1.0 means every
-   gene differs.
-
-Population collapse indicator:
-   mean_hamming < min_diversity_threshold  →  population has converged
-   Typical threshold: 0.15 (less than 15% of genes differ on average)
+Hamming distance (fraction of genes that differ between two chromosomes) is
+used as the diversity metric because the gene space is categorical / discrete.
+A distance of 0 means two chromosomes are identical; 1.0 means every gene
+differs.
 """
 
 from __future__ import annotations
@@ -41,19 +34,13 @@ from genetic_automl.utils.logger import get_logger
 log = get_logger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Hamming distance utilities
-# ---------------------------------------------------------------------------
-
 def _encode_population(population: List[Chromosome]) -> np.ndarray:
     """
-    Encode a population as an (N, G) integer matrix for vectorised distance
-    computation. Each gene value is mapped to its position in the sorted list
-    of unique values seen across the population for that gene.
+    Encode population as an (N, G) integer matrix for vectorised distance
+    computation. Each gene value is mapped to a stable integer index based on
+    its sorted position among all values seen for that gene.
 
-    Returns
-    -------
-    np.ndarray of shape (N, G), dtype int32
+    Returns np.ndarray of shape (N, G), dtype int32.
     """
     if not population:
         return np.empty((0, 0), dtype=np.int32)
@@ -61,7 +48,6 @@ def _encode_population(population: List[Chromosome]) -> np.ndarray:
     n, g = len(population), len(gene_keys)
     matrix = np.zeros((n, g), dtype=np.int32)
     for col, key in enumerate(gene_keys):
-        # Map each distinct value to a stable integer
         seen: dict = {}
         for row, chrom in enumerate(population):
             val = chrom.genes.get(key)
@@ -72,50 +58,37 @@ def _encode_population(population: List[Chromosome]) -> np.ndarray:
 
 
 def hamming_distance(a: Chromosome, b: Chromosome) -> float:
-    """
-    Fraction of genes that differ between two chromosomes.
-    Returns 0.0 (identical) to 1.0 (completely different).
-    """
+    """Fraction of genes that differ between two chromosomes (0.0 to 1.0)."""
     keys = list(a.genes.keys())
     if not keys:
         return 0.0
-    diffs = sum(1 for k in keys if a.genes.get(k) != b.genes.get(k))
-    return diffs / len(keys)
+    return sum(1 for k in keys if a.genes.get(k) != b.genes.get(k)) / len(keys)
 
 
 def mean_pairwise_hamming(population: List[Chromosome]) -> float:
     """
-    Compute mean pairwise Hamming distance across the whole population.
+    Compute mean pairwise Hamming distance across the population.
 
-    Vectorised implementation: encodes chromosomes as integer rows, then uses
-    numpy broadcasting to compute all pairwise distances in one C-level pass.
-    Falls back to the scalar loop for populations smaller than 3.
-
-    Returns value in [0, 1].
+    Uses numpy broadcasting for efficiency: encodes chromosomes as integer rows
+    then computes all pairwise distances in one pass. Returns a value in [0, 1].
     """
     n = len(population)
     if n < 2:
-        return 1.0  # trivially diverse
+        return 1.0
 
-    matrix = _encode_population(population)           # (N, G)
-    # Broadcast: matrix[i] != matrix[j]  →  (N, N, G) bool
-    diff = matrix[:, None, :] != matrix[None, :, :]   # (N, N, G)
-    pairwise = diff.mean(axis=2)                       # (N, N) float, diagonal = 0
-    # Upper-triangle mean (exclude self-comparisons)
+    matrix = _encode_population(population)
+    diff = matrix[:, None, :] != matrix[None, :, :]
+    pairwise = diff.mean(axis=2)
     i_upper, j_upper = np.triu_indices(n, k=1)
     return float(pairwise[i_upper, j_upper].mean())
 
 
 def _pairwise_matrix(population: List[Chromosome]) -> np.ndarray:
-    """Return full (N, N) pairwise Hamming matrix (vectorised)."""
+    """Return the full (N, N) pairwise Hamming distance matrix."""
     matrix = _encode_population(population)
     diff = matrix[:, None, :] != matrix[None, :, :]
     return diff.mean(axis=2)
 
-
-# ---------------------------------------------------------------------------
-# DiversityStats (per generation snapshot)
-# ---------------------------------------------------------------------------
 
 @dataclass
 class DiversityStats:
@@ -128,30 +101,24 @@ class DiversityStats:
     current_mutation_rate: float = 0.2
 
 
-# ---------------------------------------------------------------------------
-# PopulationDiversity controller
-# ---------------------------------------------------------------------------
-
 class PopulationDiversity:
     """
-    Monitors diversity and applies counter-measures when needed.
+    Monitors diversity each generation and applies counter-measures when needed.
 
     Parameters
     ----------
     backend : str
-        Needed for random_population factory.
     base_mutation_rate : float
-        The original mutation rate from GeneticConfig.
     min_diversity_threshold : float
-        Mean Hamming distance below which injection is triggered (default 0.15).
+        Mean Hamming distance below which injection fires.
     injection_ratio : float
-        Fraction of the worst individuals replaced on injection (default 0.2).
+        Fraction of worst individuals replaced on injection.
     stagnation_rounds : int
-        No-improvement streak that triggers mutation boost (default 3).
+        No-improvement streak required to trigger a mutation boost.
     mutation_boost_factor : float
-        Multiply base mutation rate by this on stagnation (default 2.5).
+        Multiplier applied to base_mutation_rate on stagnation.
     mutation_decay : float
-        After boost, decay rate back toward base each generation (default 0.85).
+        Per-generation decay coefficient back toward base_mutation_rate.
     random_seed : int
     """
 
@@ -175,13 +142,11 @@ class PopulationDiversity:
         self.mutation_boost_factor = mutation_boost_factor
         self.mutation_decay = mutation_decay
         self._rng = random.Random(random_seed)
-        self._gene_space = gene_space  # None → default space used by random_population
+        self._gene_space = gene_space
 
         self._current_mutation_rate = base_mutation_rate
         self._boosted = False
         self.history: List[DiversityStats] = []
-
-    # ------------------------------------------------------------------
 
     @property
     def current_mutation_rate(self) -> float:
@@ -195,33 +160,27 @@ class PopulationDiversity:
     ) -> Tuple[List[Chromosome], float]:
         """
         Assess diversity and apply counter-measures if needed.
+        Called after fitness evaluation and before breeding.
 
-        Called AFTER fitness evaluation and BEFORE breeding.
-
-        Returns
-        -------
-        (possibly_modified_population, current_mutation_rate)
+        Returns (population, current_mutation_rate).
         """
         mean_h = mean_pairwise_hamming(population)
-        fitnesses = [c.fitness for c in population if c.fitness is not None]
         min_h = self._min_hamming(population)
         max_h = self._max_hamming(population)
 
         injection_triggered = False
         mutation_boosted = False
 
-        # ── 1. Diversity injection ─────────────────────────────────────
         if mean_h < self.min_diversity_threshold:
             population = self._inject_diversity(population)
             injection_triggered = True
             log.warning(
-                "Diversity injection triggered at gen %d | mean_hamming=%.3f < threshold=%.3f | "
+                "Diversity injection at gen %d | mean_hamming=%.3f < threshold=%.3f | "
                 "replaced %.0f%% of worst individuals",
                 generation, mean_h, self.min_diversity_threshold,
                 self.injection_ratio * 100,
             )
 
-        # ── 2. Adaptive mutation ───────────────────────────────────────
         if no_improvement_streak >= self.stagnation_rounds:
             if not self._boosted:
                 self._current_mutation_rate = min(
@@ -231,13 +190,11 @@ class PopulationDiversity:
                 self._boosted = True
                 mutation_boosted = True
                 log.warning(
-                    "Adaptive mutation boost at gen %d | stagnation=%d rounds | "
-                    "rate %.3f → %.3f",
+                    "Mutation boost at gen %d | stagnation=%d rounds | rate %.3f -> %.3f",
                     generation, no_improvement_streak,
                     self.base_mutation_rate, self._current_mutation_rate,
                 )
         else:
-            # Improvement detected — decay back toward base rate
             if self._boosted:
                 self._current_mutation_rate = max(
                     self.base_mutation_rate,
@@ -247,11 +204,11 @@ class PopulationDiversity:
                     self._current_mutation_rate = self.base_mutation_rate
                     self._boosted = False
                     log.info(
-                        "Adaptive mutation decayed back to base rate %.3f at gen %d",
+                        "Mutation rate decayed back to base %.3f at gen %d",
                         self.base_mutation_rate, generation,
                     )
 
-        stats = DiversityStats(
+        self.history.append(DiversityStats(
             generation=generation,
             mean_hamming=mean_h,
             min_hamming=min_h,
@@ -259,41 +216,29 @@ class PopulationDiversity:
             injection_triggered=injection_triggered,
             mutation_boosted=mutation_boosted,
             current_mutation_rate=self._current_mutation_rate,
-        )
-        self.history.append(stats)
+        ))
 
         log.info(
             "Diversity gen %d | mean_hamming=%.3f | mutation_rate=%.3f%s",
-            generation,
-            mean_h,
-            self._current_mutation_rate,
+            generation, mean_h, self._current_mutation_rate,
             " [BOOSTED]" if self._boosted else "",
         )
         return population, self._current_mutation_rate
 
-    # ------------------------------------------------------------------
-
     def _inject_diversity(self, population: List[Chromosome]) -> List[Chromosome]:
-        """
-        Replace the bottom *injection_ratio* fraction with new random individuals.
-        Elites (top individuals) are never replaced.
-        """
+        """Replace the bottom injection_ratio fraction with fresh random individuals."""
         n_inject = max(1, int(len(population) * self.injection_ratio))
-
-        # Sort: best first
         sorted_pop = sorted(
             population,
             key=lambda c: c.fitness if c.fitness is not None else float("-inf"),
             reverse=True,
         )
-
-        # Keep top (N - n_inject), replace bottom n_inject
         survivors = sorted_pop[:-n_inject]
         fresh = random_population(
             backend=self.backend,
             size=n_inject,
             rng=self._rng,
-            generation=sorted_pop[0].generation,  # same gen label
+            generation=sorted_pop[0].generation,
             gene_space=self._gene_space,
         )
         return survivors + fresh
@@ -315,7 +260,7 @@ class PopulationDiversity:
         return float(pw[i_upper, j_upper].max())
 
     def summary(self) -> dict:
-        """Return diversity history summary for HTML report."""
+        """Return diversity history as a dict for the HTML report."""
         if not self.history:
             return {}
         return {

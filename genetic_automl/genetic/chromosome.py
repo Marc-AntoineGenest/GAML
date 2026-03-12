@@ -1,9 +1,8 @@
 """
 Chromosome — encodes a candidate AutoML pipeline configuration.
 
-Each chromosome is a dictionary of hyper-parameters that the genetic
-algorithm evolves. The gene space is defined in GeneSpace and is
-extensible per backend.
+Each chromosome is a flat dict of gene name → value. The gene space defines
+which names exist and what values each gene is allowed to take.
 """
 
 from __future__ import annotations
@@ -14,13 +13,9 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
-# ---------------------------------------------------------------------------
-# Gene space definition
-# ---------------------------------------------------------------------------
-
 @dataclass
 class GeneDefinition:
-    """A single gene: name + allowed values."""
+    """A single gene: its name and the list of allowed values."""
     name: str
     values: List[Any]
 
@@ -28,53 +23,32 @@ class GeneDefinition:
         return rng.choice(self.values)
 
 
-# ---------------------------------------------------------------------------
-# Preprocessing genes — shared across all backends
-# ---------------------------------------------------------------------------
-
+# Preprocessing genes — shared across all backends.
+# Applied in this order by PreprocessingPipeline:
+#   imputer → outlier → correlation → encoder → transform → scaler
+#   → missing indicator → feature selection → imbalance
 PREPROCESSING_GENES: List[GeneDefinition] = [
-    # Step 1: Correlation filter (reduces dimensionality first — cheaper subsequent steps)
     GeneDefinition("correlation_threshold", [None, 0.85, 0.90, 0.95]),
-
-    # Step 2: Numeric imputation (MUST be first — NaN breaks IQR/IsolationForest)
     GeneDefinition("numeric_imputer", ["mean", "median", "knn", "iterative", "constant"]),
-
-    # Step 3: Outlier handling (on clean numeric data, before scaling distorts distances)
     GeneDefinition("outlier_method", ["none", "iqr", "zscore", "isolation_forest"]),
     GeneDefinition("outlier_threshold", [1.5, 2.0, 3.0]),
     GeneDefinition("outlier_action", ["clip", "flag"]),
-
-    # Step 4: Categorical encoding (encode before scaling — scaling strings is nonsensical)
     GeneDefinition("categorical_encoder", ["onehot", "ordinal", "target", "binary"]),
-
-    # Step 5: Distribution transform (normalize skewness before scaling)
     GeneDefinition("distribution_transform", ["none", "yeo-johnson", "box-cox", "log1p"]),
-
-    # Step 6: Scaling (after all columns are numeric and distributions are shaped)
     GeneDefinition("scaler", ["none", "standard", "minmax", "robust"]),
-
-    # Step 7: Missing indicator (binary flags — added after imputation, signals missingness)
     GeneDefinition("missing_indicator", [True, False]),
-
-    # Step 8: Feature selection (on fully preprocessed data)
     GeneDefinition("feature_selection_method", ["none", "variance_threshold", "mutual_info", "rfe"]),
     GeneDefinition("feature_selection_k", [0.5, 0.75, 1.0]),
-
-    # Step 9: Imbalance handling (ALWAYS LAST — train only, after final feature matrix is ready)
     GeneDefinition("imbalance_method", ["none", "smote", "borderline_smote", "adasyn", "class_weight"]),
 ]
 
-# Backend-specific model genes
 _MODEL_GENES: Dict[str, List[GeneDefinition]] = {
     "autogluon": [
         GeneDefinition("presets", [
-            "medium_quality",
-            "good_quality",
-            "high_quality",
-            "optimize_for_deployment",
+            "medium_quality", "good_quality", "high_quality", "optimize_for_deployment",
         ]),
         GeneDefinition("time_limit", [30, 60, 120, 240, 300]),
-        GeneDefinition("ag_metric", [None]),  # let AutoGluon choose
+        GeneDefinition("ag_metric", [None]),
     ],
     "sklearn": [
         GeneDefinition("n_estimators", [50, 100, 200, 300, 500]),
@@ -83,7 +57,6 @@ _MODEL_GENES: Dict[str, List[GeneDefinition]] = {
     ],
 }
 
-# Full gene space = preprocessing genes + backend model genes
 _GENE_SPACES: Dict[str, List[GeneDefinition]] = {
     backend: PREPROCESSING_GENES + model_genes
     for backend, model_genes in _MODEL_GENES.items()
@@ -105,19 +78,16 @@ def build_gene_space_from_config(
     overrides: Dict[str, list],
 ) -> List[GeneDefinition]:
     """
-    Return a gene space where each gene's candidate values are replaced by
-    the list supplied in *overrides* (typically loaded from gaml_config.yaml).
+    Return a gene space with candidate values replaced by those in overrides.
 
-    Genes not mentioned in *overrides* keep their default candidate lists.
-    A single-element list pins the gene to that value — the GA will never
-    mutate it away.
+    Genes not in overrides keep their default candidates. A single-element list
+    pins a gene to one value — the GA will never mutate it away.
 
     Parameters
     ----------
     backend : str
-        'sklearn' or 'autogluon'.
     overrides : dict[str, list]
-        Mapping of gene name → list of candidate values.
+        Typically loaded from gaml_config.yaml via load_config().
     """
     base = get_gene_space(backend)
     if not overrides:
@@ -137,10 +107,6 @@ def build_gene_space_from_config(
     return result
 
 
-# ---------------------------------------------------------------------------
-# Chromosome
-# ---------------------------------------------------------------------------
-
 @dataclass
 class Chromosome:
     """
@@ -149,15 +115,15 @@ class Chromosome:
     Attributes
     ----------
     genes : dict
-        Mapping of gene name → value.
+        Gene name → value mapping.
     fitness : float | None
         Evaluated fitness (None = not yet evaluated).
     generation : int
-        Which generation this individual was created in.
+        Generation index when this chromosome was created.
     parent_ids : list[str]
-        IDs of parent chromosomes (for lineage tracking).
+        IDs of parent chromosomes (empty for generation 0).
     id : str
-        Unique 8-character hex id.
+        Unique 8-character hex identifier.
     """
 
     genes: Dict[str, Any]
@@ -167,17 +133,14 @@ class Chromosome:
     parent_ids: List[str] = field(default_factory=list)
     id: str = field(default_factory=lambda: _random_id())
 
-    # ------------------------------------------------------------------
-
     def copy(self) -> "Chromosome":
-        c = Chromosome(
+        return Chromosome(
             genes=copy.deepcopy(self.genes),
             fitness=self.fitness,
             fitness_std=self.fitness_std,
             generation=self.generation,
             parent_ids=list(self.parent_ids),
         )
-        return c
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -195,10 +158,6 @@ class Chromosome:
         return f"Chromosome(id={self.id}, fitness={fitness_str}, genes=[{genes_str}])"
 
 
-# ---------------------------------------------------------------------------
-# Population factory
-# ---------------------------------------------------------------------------
-
 def random_population(
     backend: str,
     size: int,
@@ -206,26 +165,24 @@ def random_population(
     generation: int = 0,
     gene_space: Optional[List[GeneDefinition]] = None,
 ) -> List[Chromosome]:
-    """Generate *size* random chromosomes for the given backend.
+    """
+    Generate size random chromosomes.
 
     Parameters
     ----------
     gene_space : list[GeneDefinition] | None
-        Pre-built gene space (e.g. from build_gene_space_from_config).
-        When None, the default space for backend is used.
+        Pre-built gene space. None = default space for backend.
     """
     if gene_space is None:
         gene_space = get_gene_space(backend)
-    population = []
-    for _ in range(size):
-        genes = {g.name: g.random_value(rng) for g in gene_space}
-        population.append(Chromosome(genes=genes, generation=generation))
-    return population
+    return [
+        Chromosome(
+            genes={g.name: g.random_value(rng) for g in gene_space},
+            generation=generation,
+        )
+        for _ in range(size)
+    ]
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _random_id() -> str:
     import uuid

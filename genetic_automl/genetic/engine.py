@@ -1,18 +1,15 @@
 """
 GeneticEngine — orchestrates the full evolution loop.
 
-Generation flow:
-  0. Warm-start: build gen-0 via default seeds + halving pre-screen
-  --- per generation ---
-  1. Evaluate unevaluated individuals (k-fold CV via FitnessEvaluator)
-  2. Compute stats (best / mean / worst fitness)
-  3. Update improvement streak — BEFORE diversity so controller sees correct value
-     → reset to 0 on improvement; increment on stagnation
-  4. Diversity check: compute mean Hamming distance
-     → inject fresh individuals if below threshold
-     → boost mutation rate if stagnating; decay back on improvement
-  5. Early stopping check
-  6. Breed next generation using current (adaptive) mutation rate
+Generation flow (per generation):
+  1. Evaluate unevaluated individuals via k-fold CV
+  2. Compute generation stats (best / mean / worst fitness)
+  3. Update no-improvement streak
+  4. Diversity check: inject fresh individuals if Hamming distance is too low
+  5. Adaptive mutation: boost rate on stagnation, decay on improvement
+  6. Record stats
+  7. Early stopping check
+  8. Breed next generation
 """
 
 from __future__ import annotations
@@ -94,6 +91,7 @@ class GeneticEngine:
     genetic_config : GeneticConfig
     evaluator : FitnessEvaluator
     backend : str
+    gene_space_overrides : dict, optional
     """
 
     def __init__(
@@ -108,12 +106,9 @@ class GeneticEngine:
         self.backend = backend
         self._rng = random.Random(genetic_config.random_seed)
         self.history = EvolutionHistory()
-        # Resolve gene space once — used by all population/mutation operations
         self._gene_space = build_gene_space_from_config(backend, gene_space_overrides or {})
-        # Pre-built dict for O(1) lookup in mutate() — avoids rebuilding per call
         self._gene_space_dict = {g.name: g for g in self._gene_space}
 
-        # Diversity controller (always instantiated; disabled by threshold=0 if needed)
         self._diversity = PopulationDiversity(
             backend=backend,
             base_mutation_rate=genetic_config.mutation_rate,
@@ -129,15 +124,11 @@ class GeneticEngine:
             gene_space=self._gene_space,
         )
 
-    # ------------------------------------------------------------------
-    # Main entry point
-    # ------------------------------------------------------------------
-
     def run(
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_val: pd.DataFrame = None,   # kept for API compat
+        X_val: pd.DataFrame = None,
         y_val: pd.Series = None,
     ) -> Chromosome:
         """Evolve the population and return the best chromosome found."""
@@ -149,7 +140,6 @@ class GeneticEngine:
             self.backend, cfg.warm_start, cfg.adaptive_mutation,
         )
 
-        # ── Step 0: build initial population ──────────────────────────
         population = self._build_initial_population(X_train, y_train)
 
         no_improvement_streak = 0
@@ -163,9 +153,9 @@ class GeneticEngine:
 
         for gen_idx in pbar:
             gen_start = time.perf_counter()
-            log.info("-- Generation %d / %d --", gen_idx + 1, cfg.generations)
+            log.info("Generation %d / %d", gen_idx + 1, cfg.generations)
 
-            # ── Step 1: evaluate unevaluated individuals ───────────────
+            # Evaluate unevaluated individuals
             unevaluated = [c for c in population if c.fitness is None]
             if unevaluated:
                 self._evaluate_population(unevaluated, X_train, y_train)
@@ -176,7 +166,6 @@ class GeneticEngine:
                     gen_idx + 1, len(unevaluated), self.evaluator._cache_hits,
                 )
 
-            # ── Step 2: compute stats ──────────────────────────────────
             valid = [c for c in population if c.fitness is not None]
             fitnesses = [c.fitness for c in valid]
             best_fit   = max(fitnesses)
@@ -190,8 +179,6 @@ class GeneticEngine:
                 gen_idx + 1, best_fit, mean_fit, worst_fit, elapsed,
             )
 
-            # ── Step 3: update improvement streak (must happen before diversity
-            #    so the controller sees the correct stale-free streak value) ──
             if best_fit > best_fitness_so_far:
                 best_fitness_so_far = best_fit
                 no_improvement_streak = 0
@@ -202,13 +189,11 @@ class GeneticEngine:
                     no_improvement_streak, cfg.early_stopping_rounds,
                 )
 
-            # ── Step 4: diversity + adaptive mutation ──────────────────
             population, current_mut_rate = self._diversity.update(
                 population, gen_idx, no_improvement_streak,
             )
             div_stats = self._diversity.history[-1]
 
-            # ── Step 5: record stats ───────────────────────────────────
             self.history.generations.append(GenerationStats(
                 generation=gen_idx,
                 best_fitness=best_fit,
@@ -230,12 +215,10 @@ class GeneticEngine:
                     refresh=True,
                 )
 
-            # ── Step 6: early stopping ─────────────────────────────────
             if no_improvement_streak >= cfg.early_stopping_rounds:
                 log.info("Early stopping triggered at generation %d.", gen_idx + 1)
                 break
 
-            # ── Step 7: breed next generation ─────────────────────────
             if gen_idx < cfg.generations - 1:
                 population = self._breed(population, gen_idx + 1, current_mut_rate)
 
@@ -250,10 +233,6 @@ class GeneticEngine:
         self._log_leaderboard(top_n=5)
         return best
 
-    # ------------------------------------------------------------------
-    # Evaluation (sequential or parallel)
-    # ------------------------------------------------------------------
-
     def _evaluate_population(
         self,
         population: List[Chromosome],
@@ -261,49 +240,37 @@ class GeneticEngine:
         y_train,
     ) -> None:
         """
-        Evaluate all unevaluated chromosomes, writing fitness back in-place.
+        Evaluate all chromosomes, writing fitness back in-place.
 
-        When cfg.n_jobs == 1, runs sequentially (default — safe for all backends).
-        When cfg.n_jobs != 1, uses joblib.Parallel with the loky backend to
-        evaluate each chromosome in a separate worker process.
-
-        Note: the fitness cache is NOT shared across workers in parallel mode —
-        each worker receives a fresh evaluator copy. Cache hits still work for
-        chromosomes that are already in the *current process* cache (elites
-        that carry over from the previous generation already have fitness set
-        and are skipped before reaching this method).
+        n_jobs=1 (default): sequential, cache fully effective.
+        n_jobs!=1: joblib loky workers. The fitness cache is not shared across
+        workers — each process gets its own copy. Elites that already have
+        fitness set are skipped before this method is called, so they are
+        unaffected.
         """
         if self.cfg.n_jobs == 1:
-            # Sequential path — cache is fully effective
             for chrom in population:
                 self.evaluator.evaluate(chrom, X_train, y_train)
             return
 
-        # Parallel path — spawn workers via loky
         def _worker(chrom: Chromosome) -> tuple:
-            """Returns (chromosome_id, fitness, fitness_std)."""
             fitness = self.evaluator.evaluate(chrom, X_train, y_train)
             return chrom.id, fitness, chrom.fitness_std
 
         results = Parallel(n_jobs=self.cfg.n_jobs, backend="loky", prefer="processes")(
             delayed(_worker)(chrom) for chrom in population
         )
-        # Write results back — workers operated on copies, so update originals
         result_map = {r[0]: (r[1], r[2]) for r in results}
         for chrom in population:
             if chrom.id in result_map:
                 chrom.fitness, chrom.fitness_std = result_map[chrom.id]
-
-    # ------------------------------------------------------------------
-    # Population initialisation
-    # ------------------------------------------------------------------
 
     def _build_initial_population(
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
     ) -> List[Chromosome]:
-        """Build gen-0 with warm-start or fall back to pure random."""
+        """Build generation 0 with warm-start or fall back to pure random."""
         if not self.cfg.warm_start:
             log.info("Warm-start disabled — using pure random population")
             return random_population(
@@ -329,24 +296,18 @@ class GeneticEngine:
             y_train=y_train,
         )
 
-    # ------------------------------------------------------------------
-    # Breeding
-    # ------------------------------------------------------------------
-
     def _breed(
         self,
         population: List[Chromosome],
         next_gen: int,
         mutation_rate: float,
     ) -> List[Chromosome]:
-        """Produce the next generation using the current (adaptive) mutation rate."""
+        """Produce the next generation using selection, crossover, and mutation."""
         new_pop: List[Chromosome] = []
 
-        # Preserve elites unchanged
         elite_individuals = elites(population, self.cfg.elite_ratio)
         new_pop.extend(elite_individuals)
 
-        # Fill remaining slots via crossover + mutation
         crossover_fn = (
             uniform_crossover
             if self.cfg.crossover_type == "uniform"
@@ -370,16 +331,11 @@ class GeneticEngine:
 
         return new_pop[: self.cfg.population_size]
 
-    # ------------------------------------------------------------------
-    # Leaderboard
-    # ------------------------------------------------------------------
-
     def _log_leaderboard(self, top_n: int = 5) -> None:
-        """Print a formatted top-N leaderboard to the log after evolution."""
+        """Log the top-N unique chromosomes found across the entire run."""
         evaluated = [c for c in self.history.all_chromosomes if c.fitness is not None]
         if not evaluated:
             return
-        # Deduplicate by gene fingerprint — keep best fitness per unique config
         seen: dict = {}
         for c in evaluated:
             key = tuple(sorted(c.genes.items()))
@@ -391,11 +347,10 @@ class GeneticEngine:
         log.info(sep)
         log.info("  TOP-%d LEADERBOARD", min(top_n, len(ranked)))
         log.info(sep)
-        log.info("  %-4s  %-10s  %-8s  %-10s  Key genes", "Rank", "Fitness", "+/-Std", "ID")
+        log.info("  %-4s  %-10s  %-8s  %-10s  Key genes", "Rank", "Fitness", "Std", "ID")
         log.info(sep)
         for rank, c in enumerate(ranked, 1):
-            std_str = f"{c.fitness_std:.4f}" if c.fitness_std is not None else "  n/a "
-            # Summarise the most informative genes on one line
+            std_str = f"{c.fitness_std:.4f}" if c.fitness_std is not None else "n/a"
             key_genes = {
                 k: v for k, v in c.genes.items()
                 if k in ("scaler", "numeric_imputer", "categorical_encoder",
@@ -406,10 +361,6 @@ class GeneticEngine:
                 rank, c.fitness, std_str, c.id, key_genes,
             )
         log.info(sep)
-
-    # ------------------------------------------------------------------
-    # Accessors for reporting
-    # ------------------------------------------------------------------
 
     def diversity_summary(self) -> dict:
         return self._diversity.summary()
