@@ -120,16 +120,22 @@ def mutate(
     backend: str,
     mutation_rate: float,
     rng: random.Random,
+    gene_space=None,
 ) -> Chromosome:
     """
     Randomly replace each gene with a new value from its domain
     with probability *mutation_rate*.
+
+    Parameters
+    ----------
+    gene_space : list[GeneDefinition] | None
+        Pre-built gene space. When None, the default for *backend* is used.
     """
     from genetic_automl.genetic.chromosome import get_gene_space
-    gene_space = {g.name: g for g in get_gene_space(backend)}
+    resolved = {g.name: g for g in (gene_space if gene_space is not None else get_gene_space(backend))}
     new_genes = copy.deepcopy(chromosome.genes)
 
-    for name, gene_def in gene_space.items():
+    for name, gene_def in resolved.items():
         if rng.random() < mutation_rate:
             new_genes[name] = gene_def.random_value(rng)
 

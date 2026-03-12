@@ -1,0 +1,259 @@
+# =============================================================================
+#  GAML — Genetic AutoML  |  Main Configuration File
+#  https://github.com/Marc-AntoineGenest/GAML
+# =============================================================================
+#
+#  This is the only file you need to edit before running GAML.
+#  It controls three things:
+#    1. Run settings   — what problem, which data column, which backend
+#    2. GA behaviour   — how the evolution runs
+#    3. Search spaces  — which parameter values the GA is allowed to try
+#
+#  HOW SEARCH SPACES WORK
+#  -----------------------
+#  Every entry under *_search_space is a list of candidate values.
+#
+#  Let GAML choose freely:
+#    scaler: [none, standard, minmax, robust]
+#
+#  Pin a value (remove from search, always use this):
+#    scaler: [standard]
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# A. RUN SETTINGS
+# -----------------------------------------------------------------------------
+
+run:
+
+  # Human-readable name shown in reports and MLflow. null = auto-generate.
+  name: null
+
+  # Name of the column in your DataFrame that contains the target variable.
+  target_column: "target"
+
+  # Task type.
+  # Options: classification | regression
+  problem_type: classification
+
+  # ML backend used to train models on top of each preprocessed dataset.
+  # Options: sklearn | autogluon
+  #   sklearn    — fast, zero extra install, GradientBoosting
+  #   autogluon  — more powerful, requires: pip install autogluon.tabular
+  backend: sklearn
+
+  # Metric used to score and rank chromosomes during evolution.
+  # Classification: f1_macro | f1_weighted | accuracy | roc_auc
+  # Regression:     mse | mae | r2
+  # null = use the default (classification -> f1_macro, regression -> mse)
+  metric: null
+
+
+# -----------------------------------------------------------------------------
+# B. DATA SETTINGS
+# -----------------------------------------------------------------------------
+
+data:
+
+  # Fraction of total data locked as the final test set.
+  # The GA never touches this — it is used only for the last evaluation.
+  test_size: 0.15
+
+  # Fraction of the remaining (non-test) data reserved as a validation set
+  # when the best pipeline is refit after evolution completes.
+  val_size: 0.20
+
+  # Use stratified splits to keep class ratios balanced across splits.
+  # Recommended true for classification; ignored for regression.
+  stratify: true
+
+  random_seed: 42
+
+
+# -----------------------------------------------------------------------------
+# C. GENETIC ALGORITHM SETTINGS
+# -----------------------------------------------------------------------------
+
+genetic:
+
+  # Number of pipeline configurations (chromosomes) per generation.
+  # Larger = broader search, slower runtime. Recommended range: 10-50.
+  population_size: 20
+
+  # Maximum number of generations to run.
+  # Evolution typically converges before this via early stopping.
+  generations: 15
+
+  # Number of cross-validation folds used to score each chromosome.
+  # Higher = more reliable scores, proportionally slower.
+  # Recommended: 3 for fast iteration, 5 for production runs.
+  n_cv_folds: 3
+
+  # Stop if the best fitness score does not improve for this many consecutive
+  # generations.
+  early_stopping_rounds: 5
+
+  # Probability that any single gene mutates when creating offspring.
+  mutation_rate: 0.20
+
+  # Probability that two parents exchange genes vs. direct clone.
+  crossover_rate: 0.70
+
+  # Fraction of the best individuals preserved unchanged each generation.
+  # 0.10 = top 10% survive without modification.
+  elite_ratio: 0.10
+
+  # Number of candidates that compete in each tournament selection draw.
+  tournament_size: 3
+
+  # Warm-start: seeds generation-0 with known-good configs so early
+  # generations are not wasted on obviously poor pipelines.
+  warm_start: true
+  warm_start_n_seeds: 3               # hand-crafted archetypes injected (max 3)
+  warm_start_halving_pool_ratio: 2.0  # pool = ratio x population_size, 1-fold screened
+  warm_start_halving_keep_ratio: 0.50 # fraction of screened pool kept as survivors
+
+  # Diversity injection: when chromosomes become too similar, inject fresh
+  # random individuals to prevent premature convergence.
+  diversity_threshold: 0.15       # mean Hamming distance below which injection fires
+  diversity_injection_ratio: 0.20 # fraction of worst individuals replaced
+
+  # Adaptive mutation: temporarily boost the mutation rate when the
+  # population stagnates, then decay it back once improvement resumes.
+  adaptive_mutation: true
+  adaptive_mutation_stagnation_rounds: 3  # stagnant gens before boost fires
+  adaptive_mutation_boost_factor: 2.5     # mutation_rate x this factor when boosted
+  adaptive_mutation_decay: 0.85           # per-gen decay back toward base rate
+
+  random_seed: 42
+
+
+# -----------------------------------------------------------------------------
+# D. PREPROCESSING SEARCH SPACE
+# -----------------------------------------------------------------------------
+# Steps are always applied in this fixed order (1 -> 9).
+# Pin a step with a single-element list, e.g.  scaler: [standard]
+
+preprocessing_search_space:
+
+  # Step 1 — Numeric imputation
+  # Fills NaN values in numeric columns before any other step.
+  # Options: mean | median | knn | iterative | constant
+  #   mean      — column mean (fast, sensitive to outliers)
+  #   median    — column median (robust to outliers)
+  #   knn       — k-nearest-neighbour fill (slow, high quality)
+  #   iterative — model each column from all others (slowest, best quality)
+  #   constant  — fill with 0
+  numeric_imputer: [mean, median, knn, iterative, constant]
+
+  # Step 2 — Outlier handling
+  # Options: none | iqr | zscore | isolation_forest
+  outlier_method: [none, iqr, zscore, isolation_forest]
+  # Fence multiplier (for iqr/zscore). Lower = more aggressive.
+  outlier_threshold: [1.5, 2.0, 3.0]
+  # What to do with detected outliers.
+  # Options: clip (clamp to fence) | flag (set NaN, let imputer fill)
+  outlier_action: [clip, flag]
+
+  # Step 3 — Correlation filter
+  # Drops one column from each pair exceeding the Pearson correlation threshold.
+  # Options: null (disable) | 0.85 | 0.90 | 0.95
+  correlation_threshold: [null, 0.85, 0.90, 0.95]
+
+  # Step 4 — Categorical encoding
+  # Converts text/categorical columns to numbers.
+  # Options: onehot | ordinal | target | binary
+  #   onehot   — one binary column per category (best for tree models)
+  #   ordinal  — integer label 0-N (compact, assumes order)
+  #   target   — replace with mean target value per category (powerful)
+  #   binary   — compact binary representation
+  categorical_encoder: [onehot, ordinal, target, binary]
+
+  # Step 5 — Distribution transform
+  # Reduces skewness in numeric features before scaling.
+  # Options: none | yeo-johnson | box-cox | log1p
+  #   yeo-johnson — handles negatives and zeros (recommended)
+  #   box-cox     — requires strictly positive values
+  #   log1p       — log(x+1), fast, requires non-negative values
+  distribution_transform: [none, yeo-johnson, box-cox, log1p]
+
+  # Step 6 — Scaler
+  # Normalises numeric feature magnitudes.
+  # Options: none | standard | minmax | robust
+  #   none     — no scaling (tree models are scale-invariant)
+  #   standard — zero mean, unit variance
+  #   minmax   — scale to [0, 1]
+  #   robust   — scale by median and IQR (outlier-resistant)
+  scaler: [none, standard, minmax, robust]
+
+  # Step 7 — Missing indicator
+  # Adds a binary "__missing_<col>__" flag for originally-NaN columns.
+  # Options: true | false
+  missing_indicator: [true, false]
+
+  # Step 8 — Feature selection
+  # Removes low-value features from the fully preprocessed dataset.
+  # Options: none | variance_threshold | mutual_info | rfe
+  #   variance_threshold — drop near-constant features (fastest)
+  #   mutual_info        — keep top-k by mutual information with target
+  #   rfe                — recursive feature elimination (slowest, best)
+  feature_selection_method: [none, variance_threshold, mutual_info, rfe]
+  # Fraction of features to retain when selection is active.
+  # 0.5 = keep best 50%, 1.0 = keep all (only drops near-zero-variance)
+  feature_selection_k: [0.50, 0.75, 1.0]
+
+  # Step 9 — Imbalance handling (classification only, train set only)
+  # Options: none | smote | borderline_smote | adasyn | class_weight
+  #   smote            — synthetic minority oversampling
+  #   borderline_smote — SMOTE focused on decision boundary samples
+  #   adasyn           — adaptive synthetic sampling
+  #   class_weight     — no resampling; pass inverse-freq weights to model
+  imbalance_method: [none, smote, borderline_smote, adasyn, class_weight]
+
+
+# -----------------------------------------------------------------------------
+# E. MODEL SEARCH SPACE
+# -----------------------------------------------------------------------------
+# Only the block matching your run.backend is used.
+
+sklearn_search_space:
+  # GradientBoostingClassifier / GradientBoostingRegressor
+
+  # Number of boosting stages (trees).
+  n_estimators: [50, 100, 200, 300, 500]
+
+  # Maximum depth per tree. Deeper = more expressive, more overfitting risk.
+  max_depth: [2, 3, 4, 5, 6, 8]
+
+  # Shrinkage applied to each tree's contribution.
+  # Smaller values need more trees to compensate.
+  learning_rate: [0.01, 0.05, 0.1, 0.2]
+
+
+autogluon_search_space:
+  # AutoGluon TabularPredictor (used when run.backend = autogluon)
+
+  # Quality preset controlling internal model stacking depth.
+  # Options: medium_quality | good_quality | high_quality | optimize_for_deployment
+  presets: [medium_quality, good_quality, high_quality, optimize_for_deployment]
+
+  # Seconds AutoGluon is allowed per chromosome evaluation.
+  time_limit: [30, 60, 120, 240, 300]
+
+
+# -----------------------------------------------------------------------------
+# F. REPORTING
+# -----------------------------------------------------------------------------
+
+report:
+  # Directory where the HTML report and JSON run summary are written.
+  output_dir: reports
+
+  # Local directory used as the MLflow tracking store.
+  # Set to null to disable MLflow logging entirely.
+  mlflow_tracking_uri: mlflow_runs
+
+  # Open the HTML report automatically in your browser when the run finishes.
+  open_html_on_finish: false

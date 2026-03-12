@@ -20,12 +20,12 @@ from __future__ import annotations
 import random
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import pandas as pd
 
 from genetic_automl.config import GeneticConfig
-from genetic_automl.genetic.chromosome import Chromosome, random_population
+from genetic_automl.genetic.chromosome import Chromosome, build_gene_space_from_config, random_population
 from genetic_automl.genetic.diversity import PopulationDiversity
 from genetic_automl.genetic.fitness import FitnessEvaluator
 from genetic_automl.genetic.operators import (
@@ -93,12 +93,15 @@ class GeneticEngine:
         genetic_config: GeneticConfig,
         evaluator: FitnessEvaluator,
         backend: str = "autogluon",
+        gene_space_overrides: Optional[Dict[str, list]] = None,
     ) -> None:
         self.cfg = genetic_config
         self.evaluator = evaluator
         self.backend = backend
         self._rng = random.Random(genetic_config.random_seed)
         self.history = EvolutionHistory()
+        # Resolve gene space once — used by all population/mutation operations
+        self._gene_space = build_gene_space_from_config(backend, gene_space_overrides or {})
 
         # Diversity controller (always instantiated; disabled by threshold=0 if needed)
         self._diversity = PopulationDiversity(
@@ -113,6 +116,7 @@ class GeneticEngine:
             mutation_boost_factor=genetic_config.adaptive_mutation_boost_factor,
             mutation_decay=genetic_config.adaptive_mutation_decay,
             random_seed=genetic_config.random_seed,
+            gene_space=self._gene_space,
         )
 
     # ------------------------------------------------------------------
@@ -234,6 +238,7 @@ class GeneticEngine:
                 size=self.cfg.population_size,
                 rng=self._rng,
                 generation=0,
+                gene_space=self._gene_space,
             )
 
         ws = WarmStart(
@@ -242,6 +247,7 @@ class GeneticEngine:
             halving_pool_ratio=self.cfg.warm_start_halving_pool_ratio,
             halving_keep_ratio=self.cfg.warm_start_halving_keep_ratio,
             random_seed=self.cfg.random_seed,
+            gene_space=self._gene_space,
         )
         return ws.build_initial_population(
             population_size=self.cfg.population_size,
@@ -275,12 +281,12 @@ class GeneticEngine:
                 child_a, child_b = single_point_crossover(parent_a, parent_b, self._rng)
                 for child in (child_a, child_b):
                     if len(new_pop) < self.cfg.population_size:
-                        child = mutate(child, self.backend, mutation_rate, self._rng)
+                        child = mutate(child, self.backend, mutation_rate, self._rng, self._gene_space)
                         child.generation = next_gen
                         new_pop.append(child)
             else:
                 parent = tournament_selection(population, self.cfg.tournament_size, self._rng)
-                child = mutate(parent, self.backend, mutation_rate, self._rng)
+                child = mutate(parent, self.backend, mutation_rate, self._rng, self._gene_space)
                 child.generation = next_gen
                 new_pop.append(child)
 

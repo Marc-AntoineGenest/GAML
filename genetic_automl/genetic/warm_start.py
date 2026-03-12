@@ -120,6 +120,7 @@ class WarmStart:
         halving_pool_ratio: float = 2.0,
         halving_keep_ratio: float = 0.5,
         random_seed: int = 42,
+        gene_space=None,
     ) -> None:
         self.backend = backend
         self.n_default_seeds = min(n_default_seeds, len(_DEFAULT_SEEDS))
@@ -127,6 +128,7 @@ class WarmStart:
         self.halving_keep_ratio = halving_keep_ratio
         self.random_seed = random_seed
         self._rng = random.Random(random_seed)
+        self._gene_space = gene_space  # None → default space used by random_population
 
     def build_initial_population(
         self,
@@ -159,7 +161,7 @@ class WarmStart:
         # Fill remainder with random individuals
         n_random = population_size - len(population)
         if n_random > 0:
-            population.extend(random_population(self.backend, n_random, self._rng, generation=0))
+            population.extend(random_population(self.backend, n_random, self._rng, generation=0, gene_space=self._gene_space))
             log.info("WarmStart: filled %d random individuals", n_random)
 
         log.info(
@@ -205,7 +207,7 @@ class WarmStart:
                 X_train, y_train, test_size=0.20, random_state=self.random_seed,
             )
 
-        pool = random_population(self.backend, n_pool, self._rng, generation=0)
+        pool = random_population(self.backend, n_pool, self._rng, generation=0, gene_space=self._gene_space)
         sign = fitness_sign(evaluator.metric)
         log.info("WarmStart halving: evaluating %d candidates…", n_pool)
 

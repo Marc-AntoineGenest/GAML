@@ -100,6 +100,43 @@ def get_gene_space(backend: str) -> List[GeneDefinition]:
     return _GENE_SPACES[backend]
 
 
+def build_gene_space_from_config(
+    backend: str,
+    overrides: Dict[str, list],
+) -> List[GeneDefinition]:
+    """
+    Return a gene space where each gene's candidate values are replaced by
+    the list supplied in *overrides* (typically loaded from gaml_config.yaml).
+
+    Genes not mentioned in *overrides* keep their default candidate lists.
+    A single-element list pins the gene to that value — the GA will never
+    mutate it away.
+
+    Parameters
+    ----------
+    backend : str
+        'sklearn' or 'autogluon'.
+    overrides : dict[str, list]
+        Mapping of gene name → list of candidate values.
+    """
+    base = get_gene_space(backend)
+    if not overrides:
+        return base
+    result = []
+    for gene in base:
+        if gene.name in overrides:
+            candidates = overrides[gene.name]
+            if not isinstance(candidates, list) or len(candidates) == 0:
+                raise ValueError(
+                    f"Gene '{gene.name}' override must be a non-empty list. "
+                    f"Got: {candidates!r}"
+                )
+            result.append(GeneDefinition(name=gene.name, values=candidates))
+        else:
+            result.append(gene)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Chromosome
 # ---------------------------------------------------------------------------
@@ -167,9 +204,18 @@ def random_population(
     size: int,
     rng: random.Random,
     generation: int = 0,
+    gene_space: Optional[List[GeneDefinition]] = None,
 ) -> List[Chromosome]:
-    """Generate *size* random chromosomes for the given backend."""
-    gene_space = get_gene_space(backend)
+    """Generate *size* random chromosomes for the given backend.
+
+    Parameters
+    ----------
+    gene_space : list[GeneDefinition] | None
+        Pre-built gene space (e.g. from build_gene_space_from_config).
+        When None, the default space for backend is used.
+    """
+    if gene_space is None:
+        gene_space = get_gene_space(backend)
     population = []
     for _ in range(size):
         genes = {g.name: g.random_value(rng) for g in gene_space}

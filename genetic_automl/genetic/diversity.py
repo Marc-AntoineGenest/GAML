@@ -128,6 +128,7 @@ class PopulationDiversity:
         mutation_boost_factor: float = 2.5,
         mutation_decay: float = 0.85,
         random_seed: int = 42,
+        gene_space=None,
     ) -> None:
         self.backend = backend
         self.base_mutation_rate = base_mutation_rate
@@ -137,6 +138,7 @@ class PopulationDiversity:
         self.mutation_boost_factor = mutation_boost_factor
         self.mutation_decay = mutation_decay
         self._rng = random.Random(random_seed)
+        self._gene_space = gene_space  # None → default space used by random_population
 
         self._current_mutation_rate = base_mutation_rate
         self._boosted = False
@@ -255,6 +257,7 @@ class PopulationDiversity:
             size=n_inject,
             rng=self._rng,
             generation=sorted_pop[0].generation,  # same gen label
+            gene_space=self._gene_space,
         )
         return survivors + fresh
 

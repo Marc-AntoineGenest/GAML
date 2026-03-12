@@ -42,24 +42,45 @@ class AutoMLPipeline:
     Parameters
     ----------
     config : PipelineConfig
+        Pipeline configuration. Build via :func:
+        to read from gaml_config.yaml, or construct manually.
+    gene_space_overrides : dict, optional
+        {gene_name: [candidate_values]} overrides returned by
+        :func:. Skipped if not provided.
 
-    Usage
-    -----
-    pipeline = AutoMLPipeline(config)
-    pipeline.fit(train_df)
-    predictions = pipeline.predict(test_df)
-    score = pipeline.score(test_df)
+    Usage (YAML-driven, recommended)
+    ----------------------------------
+    ::
+
+        from genetic_automl import load_config, AutoMLPipeline
+        config, overrides = load_config("gaml_config.yaml")
+        pipeline = AutoMLPipeline(config, overrides)
+        pipeline.fit(df)
+
+    Usage (code-only)
+    -----------------
+    ::
+
+        pipeline = AutoMLPipeline(PipelineConfig(...))
+        pipeline.fit(df)
     """
 
-    def __init__(self, config: PipelineConfig) -> None:
+    def __init__(
+        self,
+        config: PipelineConfig,
+        gene_space_overrides: Optional[dict] = None,
+    ) -> None:
         self.config = config
+        self._gene_space_overrides: dict = gene_space_overrides or {}
         self._data_manager: Optional[DataManager] = None
         self._best_preprocessor: Optional[PreprocessingPipeline] = None
         self._best_model: Optional[BaseAutoML] = None
         self._history: Optional[EvolutionHistory] = None
         self._report_path: Optional[str] = None
         self._final_score: Optional[float] = None
-        self._metric_name: str = get_default_metric(config.problem_type)
+        # Respect explicit metric set via load_config() / gaml_config.yaml
+        metric_override = getattr(config, "_metric_override", None)
+        self._metric_name: str = metric_override or get_default_metric(config.problem_type)
 
     # ------------------------------------------------------------------
     # Public interface
@@ -118,6 +139,7 @@ class AutoMLPipeline:
             genetic_config=cfg.genetic,
             evaluator=evaluator,
             backend=cfg.automl.backend,
+            gene_space_overrides=self._gene_space_overrides,
         )
         best_chrom = engine.run(X_train, y_train)
         self._history = engine.history
