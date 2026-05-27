@@ -145,7 +145,7 @@ class ReportConfig:
     output_dir: str = "reports"
     """Directory where HTML reports and JSON run summaries are written."""
 
-    mlflow_tracking_uri: str = "mlflow_runs"
+    mlflow_tracking_uri: Optional[str] = "mlflow_runs"
     """Local MLflow tracking store directory. Set to None to disable MLflow."""
 
     open_html_on_finish: bool = False

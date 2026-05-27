@@ -138,7 +138,7 @@ def load_config(
     rep_cfg = raw.get("report", {})
     report = ReportConfig(
         output_dir=str(rep_cfg.get("output_dir", "reports")),
-        mlflow_tracking_uri=str(rep_cfg.get("mlflow_tracking_uri", "mlflow_runs")),
+        mlflow_tracking_uri=rep_cfg.get("mlflow_tracking_uri", "mlflow_runs") or None,
         open_html_on_finish=bool(rep_cfg.get("open_html_on_finish", False)),
     )
 

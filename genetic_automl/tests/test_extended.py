@@ -203,6 +203,10 @@ class TestImputer:
 # ===========================================================================
 
 class TestImbalanceHandler:
+    @pytest.mark.skipif(
+        not __import__("importlib").util.find_spec("imblearn"),
+        reason="imbalanced-learn not installed",
+    )
     def test_smote_with_tiny_minority_auto_adjusts_k(self):
         """
         BUG-NEW-4 FIXED: When minority class count <= k_neighbors, ImbalanceHandler
@@ -218,6 +222,10 @@ class TestImbalanceHandler:
         assert len(X_out) > 103, "SMOTE should succeed after k_neighbors auto-adjustment"
         assert ih.k_neighbors == 2, f"k_neighbors should have been reduced to 2, got {ih.k_neighbors}"
 
+    @pytest.mark.skipif(
+        not __import__("importlib").util.find_spec("imblearn"),
+        reason="imbalanced-learn not installed",
+    )
     def test_smote_succeeds_with_adjusted_k(self):
         """SMOTE works when k_neighbors < minority_count."""
         from genetic_automl.preprocessing.imbalance_handler import ImbalanceHandler

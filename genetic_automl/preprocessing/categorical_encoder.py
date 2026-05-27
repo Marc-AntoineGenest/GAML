@@ -58,7 +58,9 @@ class CategoricalEncoder:
         self._ordinal_fill: Dict[str, float] = {}
 
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "CategoricalEncoder":
-        self._cat_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
+        # Pandas 3: "str" must be listed explicitly alongside "object" / "category"
+        # to avoid a Pandas4Warning about implicit string inclusion.
+        self._cat_cols = X.select_dtypes(include=["object", "category", "str"]).columns.tolist()
         if not self._cat_cols:
             log.info("CategoricalEncoder: no categorical columns found")
             return self

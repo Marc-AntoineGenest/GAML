@@ -227,6 +227,45 @@ class AutoMLPipeline:
     def final_score(self) -> Optional[float]:
         return self._final_score
 
+    @property
+    def feature_importances_(self):
+        """
+        Feature importances as a pandas Series, indexed by feature name.
+
+        Combines model importances with the list of features output by the
+        fitted preprocessing pipeline. Returns None if the pipeline has not
+        been fitted or the backend does not expose importances.
+        """
+        if self._best_model is None or self._best_preprocessor is None:
+            return None
+        raw = getattr(self._best_model, "feature_importances_", None)
+        if raw is None:
+            return None
+        selected = self._best_preprocessor.summary().get("selected_features")
+        if selected and len(selected) == len(raw):
+            return pd.Series(raw, index=selected).sort_values(ascending=False)
+        return pd.Series(raw).sort_values(ascending=False)
+
+    def summary(self) -> dict:
+        """
+        Return a human-readable summary dict of the fitted pipeline.
+
+        Keys: metric, final_score, generations_run, best_chromosome_genes,
+              preprocessing, report_path.
+        Raises RuntimeError if the pipeline has not been fitted.
+        """
+        self._check_fitted()
+        best = self._history.best if self._history else None
+        return {
+            "metric": self._metric_name,
+            "final_score": self._final_score,
+            "generations_run": len(self._history.generations) if self._history else 0,
+            "best_chromosome_genes": best.genes if best else {},
+            "best_chromosome_fitness": best.fitness if best else None,
+            "preprocessing": self._best_preprocessor.summary() if self._best_preprocessor else {},
+            "report_path": self._report_path,
+        }
+
     def save(self, path: str) -> str:
         """
         Persist the fitted pipeline to disk using joblib.

@@ -72,6 +72,7 @@ class SklearnModel(BaseAutoML):
         start = self._start_timer()
         self._estimator = self._build_estimator()
         self._estimator.fit(X_train.values, y_train.values)
+        self._feature_names = list(X_train.columns)
         self._is_fitted = True
         log.info("SklearnModel fit complete in %.2fs", self._stop_timer(start))
         return self
@@ -85,6 +86,14 @@ class SklearnModel(BaseAutoML):
         if self.problem_type == ProblemType.REGRESSION:
             return None
         return self._estimator.predict_proba(X.values) if hasattr(self._estimator, "predict_proba") else None
+
+    @property
+    def feature_importances_(self):
+        """Return feature importances from the underlying GBM estimator, or None."""
+        self._check_fitted()
+        if hasattr(self._estimator, "feature_importances_"):
+            return self._estimator.feature_importances_
+        return None
 
     def get_params(self) -> dict:
         return {
