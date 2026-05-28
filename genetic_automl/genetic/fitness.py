@@ -29,6 +29,7 @@ from genetic_automl.core.problem import (
     get_default_metric,
 )
 from genetic_automl.genetic.chromosome import Chromosome
+from genetic_automl.genetic.surrogate import SurrogateModel
 from genetic_automl.preprocessing.pipeline import PreprocessingConfig, PreprocessingPipeline
 from genetic_automl.utils.logger import get_logger
 
@@ -78,6 +79,7 @@ class FitnessEvaluator:
         multi_objective_weights: Optional[List[float]] = None,
         random_seed: int = 42,
         fitness_std_penalty: float = 0.5,
+        surrogate: Optional[SurrogateModel] = None,
     ) -> None:
         self.problem_type = problem_type
         self.target_column = target_column
@@ -88,6 +90,7 @@ class FitnessEvaluator:
         self.multi_objective_weights = multi_objective_weights
         self.random_seed = random_seed
         self.fitness_std_penalty = fitness_std_penalty
+        self.surrogate: Optional[SurrogateModel] = surrogate
         self._cache: dict = {}
         self._cache_hits: int = 0
 
@@ -114,6 +117,22 @@ class FitnessEvaluator:
                 chromosome.id, cached_fitness, self._cache_hits,
             )
             return cached_fitness
+
+        # Surrogate skip: predict fitness cheaply before paying for full CV.
+        # Only fires when the surrogate is trained and confident.
+        if self.surrogate is not None:
+            evaluated = [c for c in [chromosome]
+                         if c.fitness is None]  # always true here, but guard anyway
+            population_median = self._current_population_median
+            skip, pred_fitness = self.surrogate.should_skip(chromosome, population_median)
+            if skip:
+                chromosome.fitness = pred_fitness
+                chromosome.fitness_std = 0.0
+                log.debug(
+                    "Surrogate skipped chromosome %s | pred=%.5f | median=%.5f",
+                    chromosome.id, pred_fitness, population_median,
+                )
+                return pred_fitness
 
         try:
             pp_genes, model_genes = _split_genes(chromosome.genes)
@@ -191,6 +210,21 @@ class FitnessEvaluator:
             )
             chromosome.fitness = float("-inf")
             return float("-inf")
+
+    @property
+    def _current_population_median(self) -> float:
+        """Median fitness of all evaluated chromosomes seen so far (from cache)."""
+        cached_fitnesses = [v[0] for v in self._cache.values()
+                            if v[0] != float("-inf")]
+        if not cached_fitnesses:
+            return float("-inf")
+        return float(np.median(cached_fitnesses))
+
+    def surrogate_summary(self) -> dict:
+        """Return surrogate performance stats, or empty dict if disabled."""
+        if self.surrogate is None:
+            return {}
+        return self.surrogate.summary()
 
     def _build_cv(self, y: pd.Series):
         """Stratified KFold for classification, regular KFold for regression."""

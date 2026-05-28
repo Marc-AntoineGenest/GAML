@@ -39,7 +39,7 @@ _PREPROCESSING_GENE_NAMES = {
 }
 
 _MODEL_GENE_NAMES = {
-    "sklearn": {"model_type", "n_estimators", "max_depth", "learning_rate"},
+    "sklearn": {"model_type", "n_estimators", "max_depth", "learning_rate", "min_samples_leaf", "max_features"},
     "autogluon": {"presets", "time_limit"},
 }
 
@@ -128,6 +128,12 @@ def load_config(
         fitness_std_penalty=float(gen_cfg.get("fitness_std_penalty", 0.5)),
         crossover_type=str(gen_cfg.get("crossover_type", "uniform")),
         n_jobs=int(gen_cfg.get("n_jobs", 1)),
+        surrogate_enabled=bool(gen_cfg.get("surrogate_enabled", True)),
+        surrogate_model_type=str(gen_cfg.get("surrogate_model_type", "rf")),
+        surrogate_min_samples=int(gen_cfg.get("surrogate_min_samples", 10)),
+        surrogate_uncertainty_threshold=float(
+            gen_cfg.get("surrogate_uncertainty_threshold", 0.05)
+        ),
         random_seed=int(gen_cfg.get("random_seed", 42)),
     )
 

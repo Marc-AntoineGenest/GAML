@@ -32,6 +32,7 @@ from genetic_automl.config import GeneticConfig
 from genetic_automl.genetic.chromosome import Chromosome, build_gene_space_from_config, random_population
 from genetic_automl.genetic.diversity import PopulationDiversity
 from genetic_automl.genetic.fitness import FitnessEvaluator
+from genetic_automl.genetic.surrogate import SurrogateModel
 from genetic_automl.genetic.operators import (
     elites,
     mutate,
@@ -157,6 +158,26 @@ class GeneticEngine:
             gene_space=self._gene_space,
         )
 
+        # Build surrogate and inject into evaluator.
+        # The surrogate shares the evaluator's fitness cache indirectly:
+        # SurrogateModel.update() is fed the history of evaluated chromosomes.
+        if genetic_config.surrogate_enabled:
+            surrogate = SurrogateModel(
+                model_type=genetic_config.surrogate_model_type,
+                backend_for_ga=backend,
+                min_samples=genetic_config.surrogate_min_samples,
+                uncertainty_threshold=genetic_config.surrogate_uncertainty_threshold,
+                random_seed=genetic_config.random_seed,
+            )
+            self.evaluator.surrogate = surrogate
+            log.info(
+                "Surrogate enabled | model=%s | min_samples=%d",
+                genetic_config.surrogate_model_type,
+                genetic_config.surrogate_min_samples,
+            )
+        else:
+            log.info("Surrogate disabled.")
+
     def run(
         self,
         X_train: pd.DataFrame,
@@ -198,6 +219,10 @@ class GeneticEngine:
                     "Gen %d | evaluated=%d | cache_hits=%d",
                     gen_idx + 1, len(unevaluated), self.evaluator._cache_hits,
                 )
+
+            # Update surrogate on all chromosomes evaluated so far.
+            if self.evaluator.surrogate is not None:
+                self.evaluator.surrogate.update(self.history.all_chromosomes)
 
             valid = [c for c in population if c.fitness is not None]
             fitnesses = [c.fitness for c in valid]
@@ -264,6 +289,13 @@ class GeneticEngine:
             div_summary.get("n_boosts_total", 0),
         )
         self._log_leaderboard(top_n=5)
+        if self.evaluator.surrogate is not None:
+            s = self.evaluator.surrogate.summary()
+            log.info(
+                "Surrogate stats | model=%s | skips=%d / %d | skip_rate=%.1f%%",
+                s["model_type"], s["skips"], s["total_candidates"],
+                s["skip_rate"] * 100,
+            )
         return best
 
     def _evaluate_population(

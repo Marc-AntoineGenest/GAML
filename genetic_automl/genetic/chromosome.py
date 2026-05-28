@@ -53,7 +53,7 @@ _MODEL_GENES: Dict[str, List[GeneDefinition]] = {
     "sklearn": [
         # model_type selects the underlying algorithm family.
         # Pin to a single value via gaml_config.yaml to lock in one algorithm.
-        GeneDefinition("model_type", ["gbm", "lgbm", "xgb"]),
+        GeneDefinition("model_type", ["gbm", "lgbm", "xgb", "rf"]),
         GeneDefinition("n_estimators", [50, 100, 200, 300, 500]),
         GeneDefinition("max_depth", [2, 3, 4, 5, 6, 8]),
         GeneDefinition("learning_rate", [0.01, 0.05, 0.1, 0.2]),

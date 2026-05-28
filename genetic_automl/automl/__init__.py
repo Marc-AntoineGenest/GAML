@@ -38,6 +38,7 @@ def build_automl(
           'gbm'   — sklearn GradientBoosting (original default)
           'lgbm'  — LightGBM  (recommended; requires lightgbm)
           'xgb'   — XGBoost   (recommended; requires xgboost)
+          'rf'    — RandomForest (zero extra deps; used as default surrogate)
     """
     backend = backend.lower()
 
@@ -65,6 +66,15 @@ def build_automl(
         elif model_type == "xgb":
             from genetic_automl.automl.xgb_model import XGBModel
             return XGBModel(
+                problem_type=problem_type,
+                target_column=target_column,
+                time_limit=time_limit,
+                random_seed=random_seed,
+                **kwargs,
+            )
+        elif model_type == "rf":
+            from genetic_automl.automl.rf_model import RandomForestModel
+            return RandomForestModel(
                 problem_type=problem_type,
                 target_column=target_column,
                 time_limit=time_limit,

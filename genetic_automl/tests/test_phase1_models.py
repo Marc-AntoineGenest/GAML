@@ -267,7 +267,7 @@ class TestModelTypeGene:
     def test_model_type_values(self):
         space = get_gene_space("sklearn")
         gene = next(g for g in space if g.name == "model_type")
-        assert set(gene.values) == {"gbm", "lgbm", "xgb"}
+        assert set(gene.values) == {"gbm", "lgbm", "xgb", "rf"}
 
     def test_autogluon_space_unchanged(self):
         space = get_gene_space("autogluon")

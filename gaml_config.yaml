@@ -145,6 +145,20 @@ genetic:
   #      AutoGluon manages its own thread pool and can oversubscribe with n_jobs != 1.
   n_jobs: 1
 
+  # Surrogate-assisted GA — skip CV for chromosomes predicted to score low.
+  # A small model is trained on the accumulated fitness history and used to
+  # predict whether a new chromosome is worth evaluating fully.
+  surrogate_enabled: true
+  # Model used as the surrogate. Options: rf | lgbm | xgb | gbm
+  # 'rf' (RandomForest) is the default: zero extra deps, free uncertainty signal.
+  # Switch to 'lgbm' for larger populations where a more accurate surrogate pays off.
+  surrogate_model_type: "rf"
+  # Minimum fully-evaluated chromosomes before surrogate starts skipping.
+  surrogate_min_samples: 10
+  # RF only: only skip when per-tree prediction std is below this value.
+  # Lower = more conservative (fewer skips). Set to 999 to disable uncertainty gating.
+  surrogate_uncertainty_threshold: 0.05
+
   random_seed: 42
 
 
@@ -251,7 +265,7 @@ ensemble:
 sklearn_search_space:
   # Algorithm family the GA may pick from.
   # Pin to a single value to lock in one algorithm, e.g. model_type: ["lgbm"]
-  model_type: ["gbm", "lgbm", "xgb"]
+  model_type: ["gbm", "lgbm", "xgb", "rf"]
 
   # Number of boosting stages (trees).
   n_estimators: [50, 100, 200, 300, 500]
