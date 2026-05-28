@@ -6,6 +6,10 @@ numpy>=1.24
 # AutoML backend (primary — heavyweight, install separately)
 # autogluon.tabular>=1.0
 
+# GBM model backends (recommended — large accuracy gains over sklearn GBM)
+lightgbm>=4.0
+xgboost>=2.0
+
 # Class imbalance (optional — graceful fallback to class_weight if absent)
 # imbalanced-learn>=0.12
 

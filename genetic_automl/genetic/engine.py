@@ -80,6 +80,39 @@ class EvolutionHistory:
     def mutation_rate_curve(self) -> List[float]:
         return [g.mutation_rate for g in self.generations]
 
+    def top_chromosomes(self, k: int) -> List[Chromosome]:
+        """
+        Return the top-k unique chromosomes by fitness (best first).
+
+        "Unique" means distinct gene dictionaries — duplicate configs that
+        happened to be evaluated multiple times are deduplicated so the
+        ensemble members cover different regions of the search space.
+
+        Parameters
+        ----------
+        k : int
+            Maximum number of chromosomes to return.  If fewer unique
+            evaluated chromosomes exist, all of them are returned.
+        """
+        evaluated = [c for c in self.all_chromosomes if c.fitness is not None]
+        if not evaluated:
+            return []
+
+        # Sort best → worst
+        ranked = sorted(evaluated, key=lambda c: c.fitness, reverse=True)
+
+        # Deduplicate by gene fingerprint
+        seen: set = set()
+        unique: List[Chromosome] = []
+        for chrom in ranked:
+            key = str(sorted(chrom.genes.items()))
+            if key not in seen:
+                seen.add(key)
+                unique.append(chrom)
+            if len(unique) >= k:
+                break
+        return unique
+
 
 class GeneticEngine:
     """

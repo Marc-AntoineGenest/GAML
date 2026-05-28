@@ -46,7 +46,7 @@ def _sklearn_baseline(backend: str) -> Dict[str, Any]:
         "feature_selection_k": 1.0, "imbalance_method": "none",
     }
     if backend == "sklearn":
-        base.update({"n_estimators": 100, "max_depth": 4, "learning_rate": 0.1})
+        base.update({"model_type": "lgbm", "n_estimators": 300, "max_depth": -1, "learning_rate": 0.05})
     elif backend == "autogluon":
         base.update({"presets": "medium_quality", "time_limit": 60, "ag_metric": None})
     return base
@@ -62,7 +62,7 @@ def _robust_tabular(backend: str) -> Dict[str, Any]:
         "feature_selection_k": 1.0, "imbalance_method": "none",
     }
     if backend == "sklearn":
-        base.update({"n_estimators": 200, "max_depth": 4, "learning_rate": 0.05})
+        base.update({"model_type": "xgb", "n_estimators": 300, "max_depth": 6, "learning_rate": 0.05})
     elif backend == "autogluon":
         base.update({"presets": "good_quality", "time_limit": 120, "ag_metric": None})
     return base
@@ -78,7 +78,7 @@ def _tree_friendly(backend: str) -> Dict[str, Any]:
         "feature_selection_k": 1.0, "imbalance_method": "class_weight",
     }
     if backend == "sklearn":
-        base.update({"n_estimators": 200, "max_depth": 5, "learning_rate": 0.1})
+        base.update({"model_type": "gbm", "n_estimators": 200, "max_depth": 5, "learning_rate": 0.1})
     elif backend == "autogluon":
         base.update({"presets": "medium_quality", "time_limit": 60, "ag_metric": None})
     return base

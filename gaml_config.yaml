@@ -232,17 +232,32 @@ preprocessing_search_space:
 
 
 # -----------------------------------------------------------------------------
-# E. MODEL SEARCH SPACE
+# E. ENSEMBLE CONFIGURATION
+# -----------------------------------------------------------------------------
+# After the GA finishes, the top-k unique chromosomes are refitted and combined
+# into a soft-voting (classification) or averaging (regression) ensemble.
+# Set enabled: false to restore the original single-model behaviour.
+
+ensemble:
+  enabled: true             # true = ensemble; false = single best model only
+  top_k: 3                  # how many unique top chromosomes to combine
+  weight_by_fitness: true   # weight members proportionally to their CV fitness
+
+# -----------------------------------------------------------------------------
+# F. MODEL SEARCH SPACE
 # -----------------------------------------------------------------------------
 # Only the block matching your run.backend is used.
 
 sklearn_search_space:
-  # GradientBoostingClassifier / GradientBoostingRegressor
+  # Algorithm family the GA may pick from.
+  # Pin to a single value to lock in one algorithm, e.g. model_type: ["lgbm"]
+  model_type: ["gbm", "lgbm", "xgb"]
 
   # Number of boosting stages (trees).
   n_estimators: [50, 100, 200, 300, 500]
 
-  # Maximum depth per tree. Deeper = more expressive, more overfitting risk.
+  # Maximum depth per tree.
+  # LightGBM ignores max_depth when -1 (uses num_leaves instead).
   max_depth: [2, 3, 4, 5, 6, 8]
 
   # Shrinkage applied to each tree's contribution.

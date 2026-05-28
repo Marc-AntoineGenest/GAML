@@ -4,8 +4,8 @@ AutoMLPipeline — top-level entry point.
 Execution flow:
   1. DataManager: validate and 3-way split into train / val / test
   2. GeneticEngine: evolve preprocessing + model config via k-fold CV on train
-  3. Refit best preprocessor on train + val
-  4. Retrain best model on preprocessed train + val
+  3. Refit best preprocessor on train + val (shared across ensemble members)
+  4. Refit top-k models on preprocessed train + val (ensemble or single best)
   5. Evaluate on the locked test set
   6. Log to MLflow and export JSON
   7. Generate HTML report
@@ -22,6 +22,7 @@ import pandas as pd
 from joblib import dump as _jdump, load as _jload
 
 from genetic_automl.automl import build_automl
+from genetic_automl.automl.ensemble_model import EnsembleModel
 from genetic_automl.config import PipelineConfig
 from genetic_automl.core.base_automl import BaseAutoML
 from genetic_automl.core.data import DataManager
@@ -139,7 +140,9 @@ class AutoMLPipeline:
         X_dev = pd.concat([X_train, X_val], ignore_index=True)
         y_dev = pd.concat([y_train, y_val], ignore_index=True)
 
-        pp_genes, model_genes = _split_genes(best_chrom.genes)
+        # Use best chromosome's preprocessing config (shared across all ensemble members).
+        # All members share the same fitted preprocessor — they receive identical features.
+        pp_genes, _ = _split_genes(best_chrom.genes)
         pp_config = PreprocessingConfig.from_genes(pp_genes)
         self._best_preprocessor = PreprocessingPipeline(
             config=pp_config,
@@ -149,16 +152,9 @@ class AutoMLPipeline:
         X_dev_pp, y_dev_pp = self._best_preprocessor.fit_transform_train(X_dev, y_dev)
         X_test_pp = self._best_preprocessor.transform(X_test)
 
-        log.info("Retraining best model on preprocessed train + val")
-        self._best_model = build_automl(
-            backend=cfg.automl.backend,
-            problem_type=cfg.problem_type,
-            target_column=cfg.target_column,
-            random_seed=cfg.genetic.random_seed,
-            time_limit=cfg.automl.time_limit_per_eval * 2,
-            **{k: v for k, v in model_genes.items() if v is not None},
+        self._best_model = self._build_final_model(
+            cfg, best_chrom, X_dev_pp, y_dev_pp,
         )
-        self._best_model.fit(X_dev_pp, y_dev_pp, None, None)
 
         self._final_score = self._best_model.score(X_test_pp, y_test, metric=self._metric_name)
         log.info(
@@ -265,6 +261,82 @@ class AutoMLPipeline:
             "preprocessing": self._best_preprocessor.summary() if self._best_preprocessor else {},
             "report_path": self._report_path,
         }
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _build_final_model(
+        self,
+        cfg,
+        best_chrom,
+        X_dev_pp: "pd.DataFrame",
+        y_dev_pp: "pd.Series",
+    ) -> "BaseAutoML":
+        """
+        Build and fit the final model after evolution.
+
+        When ensemble is enabled (cfg.automl.ensemble.enabled), refit the
+        top-k unique chromosomes and combine them into an EnsembleModel.
+        Otherwise, fall back to fitting only the single best chromosome
+        (original behaviour).
+
+        All members receive the same already-preprocessed X_dev_pp / y_dev_pp.
+        """
+        ens_cfg = cfg.automl.ensemble
+        top_k = ens_cfg.top_k if ens_cfg.enabled else 1
+
+        # Collect unique top-k chromosomes from history (best first).
+        candidates = self._history.top_chromosomes(top_k) if self._history else [best_chrom]
+        if not candidates:
+            candidates = [best_chrom]
+
+        log.info(
+            "Building final model | ensemble=%s | top_k=%d | available=%d",
+            ens_cfg.enabled, top_k, len(candidates),
+        )
+
+        fitted_members = []
+        fitness_weights = []
+        for rank, chrom in enumerate(candidates):
+            _, model_genes = _split_genes(chrom.genes)
+            model = build_automl(
+                backend=cfg.automl.backend,
+                problem_type=cfg.problem_type,
+                target_column=cfg.target_column,
+                random_seed=cfg.genetic.random_seed,
+                time_limit=cfg.automl.time_limit_per_eval * 2,
+                **{k: v for k, v in model_genes.items() if v is not None},
+            )
+            model.fit(X_dev_pp, y_dev_pp, None, None)
+            fitted_members.append(model)
+            fitness_weights.append(max(chrom.fitness or 0.0, 0.0))
+            log.info(
+                "  Member %d/%d | genes=%s | cv_fitness=%.5f",
+                rank + 1, len(candidates),
+                {k: v for k, v in chrom.genes.items()
+                 if k not in ("outlier_threshold", "outlier_action",
+                              "missing_indicator", "feature_selection_k")},
+                chrom.fitness or 0.0,
+            )
+
+        if len(fitted_members) == 1:
+            log.info("Only one member — returning single model (no ensemble overhead).")
+            return fitted_members[0]
+
+        # Regression fitness values are negative (negated MSE/MAE).
+        # If all clamped weights are zero, fall back to uniform weighting.
+        all_zero = all(w == 0.0 for w in fitness_weights)
+        weights = (fitness_weights if (ens_cfg.weight_by_fitness and not all_zero)
+                   else None)
+        ensemble = EnsembleModel(
+            members=fitted_members,
+            problem_type=cfg.problem_type,
+            target_column=cfg.target_column,
+            weights=weights,
+        )
+        log.info("EnsembleModel ready: %s", ensemble)
+        return ensemble
 
     def save(self, path: str) -> str:
         """

@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from genetic_automl.config import (
     AutoMLConfig,
     DataConfig,
+    EnsembleConfig,
     GeneticConfig,
     PipelineConfig,
     ReportConfig,
@@ -38,7 +39,7 @@ _PREPROCESSING_GENE_NAMES = {
 }
 
 _MODEL_GENE_NAMES = {
-    "sklearn": {"n_estimators", "max_depth", "learning_rate"},
+    "sklearn": {"model_type", "n_estimators", "max_depth", "learning_rate"},
     "autogluon": {"presets", "time_limit"},
 }
 
@@ -134,6 +135,13 @@ def load_config(
     if backend == "autogluon":
         ag_cfg = raw.get("autogluon", {})
         automl.time_limit_per_eval = int(ag_cfg.get("time_limit_per_eval", 60))
+
+    ens_cfg = raw.get("ensemble", {})
+    automl.ensemble = EnsembleConfig(
+        enabled=bool(ens_cfg.get("enabled", True)),
+        top_k=int(ens_cfg.get("top_k", 3)),
+        weight_by_fitness=bool(ens_cfg.get("weight_by_fitness", True)),
+    )
 
     rep_cfg = raw.get("report", {})
     report = ReportConfig(

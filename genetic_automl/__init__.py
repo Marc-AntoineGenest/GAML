@@ -2,7 +2,7 @@
 
 __version__ = "0.1.0"
 from genetic_automl.pipeline import AutoMLPipeline
-from genetic_automl.config import PipelineConfig, GeneticConfig, AutoMLConfig, DataConfig, ReportConfig
+from genetic_automl.config import PipelineConfig, GeneticConfig, AutoMLConfig, DataConfig, ReportConfig, EnsembleConfig
 from genetic_automl.config_loader import load_config
 from genetic_automl.core.problem import ProblemType
 
@@ -15,5 +15,6 @@ __all__ = [
     "ReportConfig",
     "ProblemType",
     "load_config",
+    "EnsembleConfig",
     "__version__",
 ]

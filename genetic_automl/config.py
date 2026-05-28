@@ -103,6 +103,30 @@ class GeneticConfig:
 
 
 @dataclass
+class EnsembleConfig:
+    """Ensemble settings for the final model (applied after the GA finishes)."""
+
+    enabled: bool = True
+    """
+    When True, refit and combine the top-k unique chromosomes into a
+    soft-voting / averaging ensemble.  When False, only the single best
+    chromosome is used (original behaviour).
+    """
+
+    top_k: int = 3
+    """
+    Number of unique top chromosomes to include in the ensemble.
+    Must be >= 1.  If fewer unique chromosomes exist, all of them are used.
+    """
+
+    weight_by_fitness: bool = True
+    """
+    When True, weight each ensemble member proportionally to its CV fitness.
+    When False, use equal weights.
+    """
+
+
+@dataclass
 class AutoMLConfig:
     """AutoML backend settings."""
 
@@ -115,6 +139,8 @@ class AutoMLConfig:
     autogluon_presets: str = "medium_quality"
     """AutoGluon presets string (ignored for other backends)."""
 
+    ensemble: EnsembleConfig = field(default_factory=EnsembleConfig)
+    """Ensemble configuration for the final model."""
     extra_kwargs: Dict[str, Any] = field(default_factory=dict)
     """Additional kwargs forwarded verbatim to the backend constructor."""
 
