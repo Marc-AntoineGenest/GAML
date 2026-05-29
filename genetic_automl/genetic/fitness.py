@@ -11,6 +11,8 @@ Design principles:
   - Chromosomes with identical genes reuse a cached result (no redundant CV).
   - Fitness includes a configurable std penalty to favour stable pipelines:
       fitness = mean_cv - penalty * std_cv
+  - ASHA median-stop pruning: fold loop is cut short when a chromosome's
+    running mean score is already below the population fold-score median.
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ _PREPROCESSING_GENE_KEYS = {
     "correlation_threshold", "categorical_encoder", "distribution_transform",
     "scaler", "missing_indicator", "feature_selection_method",
     "feature_selection_k", "imbalance_method",
+    "feature_engineering", "max_interaction_features",
 }
 
 
@@ -80,6 +83,9 @@ class FitnessEvaluator:
         random_seed: int = 42,
         fitness_std_penalty: float = 0.5,
         surrogate: Optional[SurrogateModel] = None,
+        asha_enabled: bool = True,
+        asha_min_folds_before_prune: int = 1,
+        asha_prune_margin: float = 0.0,
     ) -> None:
         self.problem_type = problem_type
         self.target_column = target_column
@@ -91,8 +97,15 @@ class FitnessEvaluator:
         self.random_seed = random_seed
         self.fitness_std_penalty = fitness_std_penalty
         self.surrogate: Optional[SurrogateModel] = surrogate
+        self.asha_enabled = asha_enabled
+        self.asha_min_folds_before_prune = asha_min_folds_before_prune
+        self.asha_prune_margin = asha_prune_margin
         self._cache: dict = {}
         self._cache_hits: int = 0
+        # Shared pool of all individual fold scores seen across every chromosome
+        # this run.  Used as the ASHA pruning reference distribution.
+        self._all_fold_scores: list = []
+        self._asha_prunes: int = 0
 
     def evaluate(
         self,
@@ -176,10 +189,45 @@ class FitnessEvaluator:
                     score = raw * fitness_sign(self.metric)
 
                 fold_scores.append(score)
+                # Record this fold score in the shared pool for future ASHA decisions.
+                if score != float("-inf"):
+                    self._all_fold_scores.append(score)
+
                 log.debug(
                     "Chromosome %s | fold %d/%d | score=%.6f",
                     chromosome.id, fold_idx + 1, self.n_folds, score,
                 )
+
+                # ASHA median-stop pruning: after min_folds have completed,
+                # check whether this chromosome is already trailing the field.
+                if (
+                    self.asha_enabled
+                    and fold_idx + 1 >= self.asha_min_folds_before_prune
+                    and fold_idx + 1 < self.n_folds   # don't prune on the last fold
+                    and len(self._all_fold_scores) >= self.n_folds * 2  # need a reference
+                ):
+                    valid_so_far = [s for s in fold_scores if s != float("-inf")]
+                    if valid_so_far:
+                        running_mean = float(np.mean(valid_so_far))
+                        reference_median = float(np.median(self._all_fold_scores))
+                        if running_mean < reference_median - self.asha_prune_margin:
+                            self._asha_prunes += 1
+                            log.debug(
+                                "ASHA prune | chromosome %s | running_mean=%.5f "
+                                "< median=%.5f - margin=%.3f | folds_done=%d/%d",
+                                chromosome.id, running_mean, reference_median,
+                                self.asha_prune_margin, fold_idx + 1, self.n_folds,
+                            )
+                            # Assign penalised fitness from the folds we did run,
+                            # then break out of the fold loop early.
+                            fitness = running_mean
+                            fitness_std = float(np.std(valid_so_far)) if len(valid_so_far) > 1 else 0.0
+                            penalised_fitness = fitness - self.fitness_std_penalty * fitness_std
+                            chromosome.fitness = penalised_fitness
+                            chromosome.fitness_std = fitness_std
+                            # Do NOT cache pruned results — a full evaluation
+                            # could score higher; we don't want to lock in a low value.
+                            return penalised_fitness
 
             valid = [s for s in fold_scores if s != float("-inf")]
             if not valid:
@@ -220,8 +268,20 @@ class FitnessEvaluator:
             return float("-inf")
         return float(np.median(cached_fitnesses))
 
+    def evaluator_summary(self) -> dict:
+        """Return combined stats for surrogate and ASHA pruning."""
+        result = {
+            "asha_enabled": self.asha_enabled,
+            "asha_prunes": self._asha_prunes,
+            "asha_fold_pool_size": len(self._all_fold_scores),
+        }
+        if self.surrogate is not None:
+            result["surrogate"] = self.surrogate.summary()
+        return result
+
     def surrogate_summary(self) -> dict:
-        """Return surrogate performance stats, or empty dict if disabled."""
+        """Return surrogate performance stats, or empty dict if disabled.
+        Deprecated: use evaluator_summary() instead."""
         if self.surrogate is None:
             return {}
         return self.surrogate.summary()

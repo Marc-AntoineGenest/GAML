@@ -5,6 +5,7 @@ Orchestrates all preprocessing steps in the correct order:
 
   1. NumericImputer         — fill NaN before outlier detection
   2. OutlierHandler         — clean numeric data, before scaling
+  2.5 FeatureEngineer       — poly2 / ratios / log1p on clean numerics
   3. CorrelationFilter      — reliable stats after imputation + outlier treatment
   4. CategoricalEncoder     — encode before scaling
   5. DistributionTransform  — normalize skewness before scaling
@@ -26,6 +27,7 @@ import pandas as pd
 
 from genetic_automl.core.problem import ProblemType
 from genetic_automl.preprocessing.categorical_encoder import CategoricalEncoder
+from genetic_automl.preprocessing.feature_engineer import FeatureEngineer
 from genetic_automl.preprocessing.correlation_filter import CorrelationFilter
 from genetic_automl.preprocessing.distribution_transform import DistributionTransform
 from genetic_automl.preprocessing.feature_selector import FeatureSelector
@@ -53,6 +55,8 @@ class PreprocessingConfig:
     feature_selection_method: str = "none"
     feature_selection_k: float = 0.75
     imbalance_method: str = "none"
+    feature_engineering: str = "none"
+    max_interaction_features: int = 8
 
     @classmethod
     def from_genes(cls, genes: Dict[str, Any]) -> "PreprocessingConfig":
@@ -100,6 +104,10 @@ class PreprocessingPipeline:
             problem_type_str=problem_type.value,
             random_seed=random_seed,
         )
+        self._feature_engineer      = FeatureEngineer(
+            strategy=config.feature_engineering,
+            max_interaction_features=config.max_interaction_features,
+        )
         self._imbalance_handler     = ImbalanceHandler(
             method=config.imbalance_method,
             random_seed=random_seed,
@@ -125,6 +133,7 @@ class PreprocessingPipeline:
 
         X = self._numeric_imputer.fit_transform(X, y)
         X = self._outlier_handler.fit_transform(X, y)
+        X = self._feature_engineer.fit_transform(X, y)
         X = self._correlation_filter.fit_transform(X, y)
         X = self._categorical_encoder.fit_transform(X, y if self.config.categorical_encoder == "target" else None)
         X = self._distribution_transform.fit_transform(X, y)
@@ -150,6 +159,7 @@ class PreprocessingPipeline:
         raw_mask = X.isnull()
         X = self._numeric_imputer.transform(X)
         X = self._outlier_handler.transform(X)
+        X = self._feature_engineer.transform(X)
         X = self._correlation_filter.transform(X)
         X = self._categorical_encoder.transform(X)
         X = self._distribution_transform.transform(X)
@@ -179,5 +189,7 @@ class PreprocessingPipeline:
                 "feature_selection_method": self.config.feature_selection_method,
                 "feature_selection_k": self.config.feature_selection_k,
                 "imbalance_method": self.config.imbalance_method,
+                "feature_engineering": self.config.feature_engineering,
+                "max_interaction_features": self.config.max_interaction_features,
             },
         }

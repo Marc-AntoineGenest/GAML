@@ -159,6 +159,20 @@ genetic:
   # Lower = more conservative (fewer skips). Set to 999 to disable uncertainty gating.
   surrogate_uncertainty_threshold: 0.05
 
+  # ASHA / median-stop pruning — cut the fold loop short for clearly bad chromosomes.
+  # After asha_min_folds_before_prune folds, if a chromosome's running mean score
+  # is below the field median by more than asha_prune_margin, remaining folds are
+  # skipped.  Expected to save 20-30% of total CV time at no accuracy cost.
+  asha_enabled: true
+  asha_min_folds_before_prune: 1   # folds needed before pruning can fire (1 = aggressive)
+  asha_prune_margin: 0.0           # extra clearance below median required to prune
+
+  # Generation checkpointing — save state to disk so runs can be resumed after a crash.
+  # Set checkpoint_dir to a path to enable. Leave null to disable.
+  # checkpoint_dir: "checkpoints"       # directory to save checkpoint files
+  # checkpoint_every: 1                 # save every N generations
+  # resume_from_checkpoint: null        # path to a .joblib file to resume from
+
   random_seed: 42
 
 
@@ -243,6 +257,18 @@ preprocessing_search_space:
   #   adasyn           — adaptive synthetic sampling
   #   class_weight     — no resampling; pass inverse-freq weights to model
   imbalance_method: [none, smote, borderline_smote, adasyn, class_weight]
+
+  # Feature engineering — generate new features from existing numeric columns.
+  # Applied at step 2.5 (after imputation and outlier handling, before scaling).
+  # Engineered features that don't improve CV score get removed by FeatureSelector.
+  #   none  : no new features (safest for very small datasets)
+  #   log1p : log(x+1) copies of right-skewed columns
+  #   ratio : pairwise ratios of the most correlated column pairs
+  #   poly2 : squared terms + cross-products for the top-N variant columns
+  #   all   : apply log1p + ratio + poly2 in sequence
+  feature_engineering: [none, log1p, ratio, poly2, all]
+  # How many source columns to use for poly2 and ratio (caps combinatorial blow-up).
+  max_interaction_features: [4, 6, 8]
 
 
 # -----------------------------------------------------------------------------

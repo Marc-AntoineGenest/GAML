@@ -126,6 +126,9 @@ class AutoMLPipeline:
             n_folds=cfg.genetic.n_cv_folds,
             random_seed=cfg.genetic.random_seed,
             fitness_std_penalty=cfg.genetic.fitness_std_penalty,
+            asha_enabled=cfg.genetic.asha_enabled,
+            asha_min_folds_before_prune=cfg.genetic.asha_min_folds_before_prune,
+            asha_prune_margin=cfg.genetic.asha_prune_margin,
         )
         engine = GeneticEngine(
             genetic_config=cfg.genetic,

@@ -40,6 +40,8 @@ PREPROCESSING_GENES: List[GeneDefinition] = [
     GeneDefinition("feature_selection_method", ["none", "variance_threshold", "mutual_info", "rfe"]),
     GeneDefinition("feature_selection_k", [0.5, 0.75, 1.0]),
     GeneDefinition("imbalance_method", ["none", "smote", "borderline_smote", "adasyn", "class_weight"]),
+    GeneDefinition("feature_engineering", ["none", "log1p", "ratio", "poly2", "all"]),
+    GeneDefinition("max_interaction_features", [4, 6, 8]),
 ]
 
 _MODEL_GENES: Dict[str, List[GeneDefinition]] = {

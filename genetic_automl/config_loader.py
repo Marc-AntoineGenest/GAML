@@ -40,6 +40,7 @@ _PREPROCESSING_GENE_NAMES = {
 
 _MODEL_GENE_NAMES = {
     "sklearn": {"model_type", "n_estimators", "max_depth", "learning_rate", "min_samples_leaf", "max_features"},
+    "_preprocessing": {"feature_engineering", "max_interaction_features"},
     "autogluon": {"presets", "time_limit"},
 }
 
@@ -134,6 +135,12 @@ def load_config(
         surrogate_uncertainty_threshold=float(
             gen_cfg.get("surrogate_uncertainty_threshold", 0.05)
         ),
+        asha_enabled=bool(gen_cfg.get("asha_enabled", True)),
+        asha_min_folds_before_prune=int(gen_cfg.get("asha_min_folds_before_prune", 1)),
+        asha_prune_margin=float(gen_cfg.get("asha_prune_margin", 0.0)),
+        checkpoint_dir=gen_cfg.get("checkpoint_dir") or None,
+        checkpoint_every=int(gen_cfg.get("checkpoint_every", 1)),
+        resume_from_checkpoint=gen_cfg.get("resume_from_checkpoint") or None,
         random_seed=int(gen_cfg.get("random_seed", 42)),
     )
 

@@ -32,6 +32,8 @@ from genetic_automl.config import GeneticConfig
 from genetic_automl.genetic.chromosome import Chromosome, build_gene_space_from_config, random_population
 from genetic_automl.genetic.diversity import PopulationDiversity
 from genetic_automl.genetic.fitness import FitnessEvaluator
+import os
+import joblib
 from genetic_automl.genetic.surrogate import SurrogateModel
 from genetic_automl.genetic.operators import (
     elites,
@@ -198,8 +200,23 @@ class GeneticEngine:
 
         no_improvement_streak = 0
         best_fitness_so_far = float("-inf")
+        start_gen = 0
 
-        gen_range = range(cfg.generations)
+        # Checkpoint resume: restore saved state and fast-forward the gen range.
+        if cfg.resume_from_checkpoint:
+            state = self._load_checkpoint(cfg.resume_from_checkpoint)
+            if state is not None:
+                population          = state["population"]
+                self.history        = state["history"]
+                no_improvement_streak = state["no_improvement_streak"]
+                best_fitness_so_far = state["best_fitness_so_far"]
+                start_gen           = state["next_generation"]
+                log.info(
+                    "Resumed from checkpoint '%s' | starting at generation %d",
+                    cfg.resume_from_checkpoint, start_gen + 1,
+                )
+
+        gen_range = range(start_gen, cfg.generations)
         pbar = (
             _tqdm(gen_range, desc="Evolution", unit="gen", dynamic_ncols=True)
             if _TQDM_AVAILABLE else gen_range
@@ -273,6 +290,13 @@ class GeneticEngine:
                     refresh=True,
                 )
 
+            # Checkpoint save
+            if cfg.checkpoint_dir and (gen_idx + 1) % cfg.checkpoint_every == 0:
+                self._save_checkpoint(
+                    cfg.checkpoint_dir, gen_idx, population,
+                    no_improvement_streak, best_fitness_so_far,
+                )
+
             if no_improvement_streak >= cfg.early_stopping_rounds:
                 log.info("Early stopping triggered at generation %d.", gen_idx + 1)
                 break
@@ -289,14 +313,68 @@ class GeneticEngine:
             div_summary.get("n_boosts_total", 0),
         )
         self._log_leaderboard(top_n=5)
-        if self.evaluator.surrogate is not None:
-            s = self.evaluator.surrogate.summary()
+        ev_summary = self.evaluator.evaluator_summary()
+        log.info(
+            "Evaluator stats | asha_prunes=%d | fold_pool=%d",
+            ev_summary.get("asha_prunes", 0),
+            ev_summary.get("asha_fold_pool_size", 0),
+        )
+        if "surrogate" in ev_summary:
+            s = ev_summary["surrogate"]
             log.info(
                 "Surrogate stats | model=%s | skips=%d / %d | skip_rate=%.1f%%",
                 s["model_type"], s["skips"], s["total_candidates"],
                 s["skip_rate"] * 100,
             )
         return best
+
+    # ------------------------------------------------------------------
+    # Checkpoint helpers
+    # ------------------------------------------------------------------
+
+    def _save_checkpoint(
+        self,
+        checkpoint_dir: str,
+        gen_idx: int,
+        population: list,
+        no_improvement_streak: int,
+        best_fitness_so_far: float,
+    ) -> None:
+        """Persist current evolution state to disk as a joblib file."""
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        path = os.path.join(checkpoint_dir, f"checkpoint_gen{gen_idx + 1:04d}.joblib")
+        state = {
+            "population": population,
+            "history": self.history,
+            "no_improvement_streak": no_improvement_streak,
+            "best_fitness_so_far": best_fitness_so_far,
+            "next_generation": gen_idx + 1,
+            "fitness_cache": self.evaluator._cache,
+            "all_fold_scores": self.evaluator._all_fold_scores,
+        }
+        joblib.dump(state, path)
+        log.info("Checkpoint saved to '%s'", path)
+
+    def _load_checkpoint(self, path: str) -> dict:
+        """Restore evolution state from a checkpoint file. Returns None on failure."""
+        if not os.path.exists(path):
+            log.warning("Checkpoint file not found: '%s' — starting fresh.", path)
+            return None
+        try:
+            state = joblib.load(path)
+            # Restore fitness cache so we don't re-evaluate chromosomes we already scored
+            self.evaluator._cache.update(state.get("fitness_cache", {}))
+            self.evaluator._all_fold_scores.extend(state.get("all_fold_scores", []))
+            log.info(
+                "Checkpoint loaded | gen=%d | cache_entries=%d | fold_scores=%d",
+                state["next_generation"],
+                len(self.evaluator._cache),
+                len(self.evaluator._all_fold_scores),
+            )
+            return state
+        except Exception as exc:
+            log.warning("Failed to load checkpoint '%s': %s — starting fresh.", path, exc)
+            return None
 
     def _evaluate_population(
         self,

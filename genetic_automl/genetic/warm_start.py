@@ -44,6 +44,7 @@ def _sklearn_baseline(backend: str) -> Dict[str, Any]:
         "distribution_transform": "none", "scaler": "standard",
         "missing_indicator": False, "feature_selection_method": "none",
         "feature_selection_k": 1.0, "imbalance_method": "none",
+        "feature_engineering": "none", "max_interaction_features": 8,
     }
     if backend == "sklearn":
         base.update({"model_type": "lgbm", "n_estimators": 300, "max_depth": -1, "learning_rate": 0.05})
@@ -60,6 +61,7 @@ def _robust_tabular(backend: str) -> Dict[str, Any]:
         "distribution_transform": "yeo-johnson", "scaler": "robust",
         "missing_indicator": True, "feature_selection_method": "none",
         "feature_selection_k": 1.0, "imbalance_method": "none",
+        "feature_engineering": "log1p", "max_interaction_features": 6,
     }
     if backend == "sklearn":
         base.update({"model_type": "xgb", "n_estimators": 300, "max_depth": 6, "learning_rate": 0.05})
@@ -76,6 +78,7 @@ def _tree_friendly(backend: str) -> Dict[str, Any]:
         "distribution_transform": "none", "scaler": "none",
         "missing_indicator": True, "feature_selection_method": "none",
         "feature_selection_k": 1.0, "imbalance_method": "class_weight",
+        "feature_engineering": "poly2", "max_interaction_features": 4,
     }
     if backend == "sklearn":
         base.update({"model_type": "gbm", "n_estimators": 200, "max_depth": 5, "learning_rate": 0.1})
