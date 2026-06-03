@@ -23,6 +23,7 @@ from genetic_automl.config import (
     DataConfig,
     EnsembleConfig,
     GeneticConfig,
+    OptunaConfig,
     PipelineConfig,
     ReportConfig,
 )
@@ -154,6 +155,17 @@ def load_config(
         enabled=bool(ens_cfg.get("enabled", True)),
         top_k=int(ens_cfg.get("top_k", 3)),
         weight_by_fitness=bool(ens_cfg.get("weight_by_fitness", True)),
+    )
+
+    opt_raw = raw.get("optuna", {})
+    timeout_val = opt_raw.get("timeout", None)
+    automl.optuna = OptunaConfig(
+        enabled=bool(opt_raw.get("enabled", False)),
+        n_trials=int(opt_raw.get("n_trials", 30)),
+        timeout=float(timeout_val) if timeout_val is not None else None,
+        use_cv=bool(opt_raw.get("use_cv", False)),
+        n_cv_folds=int(opt_raw.get("n_cv_folds", 3)),
+        verbose=bool(opt_raw.get("verbose", False)),
     )
 
     rep_cfg = raw.get("report", {})

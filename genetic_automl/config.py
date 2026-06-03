@@ -213,6 +213,56 @@ class EnsembleConfig:
 
 
 @dataclass
+class OptunaConfig:
+    """
+    Optuna Bayesian HPO settings — applied after the GA finishes.
+
+    The GA discovers the best structural pipeline (which preprocessor, model
+    family, feature engineering step).  Optuna then fine-tunes the continuous
+    model hyperparameters (learning rate, depth, regularisation) using
+    Tree-structured Parzen Estimation (TPE).
+
+    Set enabled=False to skip HPO and use the GA chromosome's hyperparameters
+    as-is (original behaviour).
+    """
+
+    enabled: bool = False
+    """
+    Enable Optuna HPO after the GA run.
+    Requires optuna to be installed (pip install optuna).
+    Default False so existing runs are unaffected until explicitly opted in.
+    """
+
+    n_trials: int = 30
+    """
+    Number of Optuna trials.
+    20–30 gives a good speed/accuracy trade-off for most datasets.
+    Use 50–100 for production runs where wall-clock time allows.
+    """
+
+    timeout: Optional[float] = None
+    """
+    Hard wall-clock limit in seconds for the entire Optuna study.
+    None = no time limit (runs until n_trials are completed).
+    Set e.g. 300.0 to cap HPO at 5 minutes regardless of n_trials.
+    """
+
+    use_cv: bool = False
+    """
+    If True, evaluate each Optuna trial with full k-fold CV (slower, more
+    accurate — matches the GA's own evaluation).
+    If False (default), use a single 80/20 stratified split per trial (5–10×
+    faster; sufficient for most HPO tasks).
+    """
+
+    n_cv_folds: int = 3
+    """Number of CV folds when use_cv=True. Ignored when use_cv=False."""
+
+    verbose: bool = False
+    """Log Optuna's per-trial output. Default False keeps the GAML log clean."""
+
+
+@dataclass
 class AutoMLConfig:
     """AutoML backend settings."""
 
@@ -227,6 +277,10 @@ class AutoMLConfig:
 
     ensemble: EnsembleConfig = field(default_factory=EnsembleConfig)
     """Ensemble configuration for the final model."""
+
+    optuna: OptunaConfig = field(default_factory=OptunaConfig)
+    """Optuna Bayesian HPO configuration — applied after the GA finishes."""
+
     extra_kwargs: Dict[str, Any] = field(default_factory=dict)
     """Additional kwargs forwarded verbatim to the backend constructor."""
 

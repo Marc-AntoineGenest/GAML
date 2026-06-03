@@ -29,6 +29,7 @@ from genetic_automl.core.data import DataManager
 from genetic_automl.core.problem import get_default_metric, ProblemType
 from genetic_automl.genetic.engine import EvolutionHistory, GeneticEngine
 from genetic_automl.genetic.fitness import FitnessEvaluator, _split_genes
+from genetic_automl.genetic.optuna_tuner import OptunaTuner
 from genetic_automl.preprocessing.pipeline import PreprocessingConfig, PreprocessingPipeline
 from genetic_automl.reporting.html_reporter import HTMLReporter
 from genetic_automl.reporting.mlflow_logger import MLflowLogger
@@ -284,9 +285,16 @@ class AutoMLPipeline:
         Otherwise, fall back to fitting only the single best chromosome
         (original behaviour).
 
+        When Optuna HPO is enabled (cfg.automl.optuna.enabled), the best
+        chromosome's model hyperparameters are fine-tuned with Bayesian
+        optimisation before fitting.  The tuned params are applied only to
+        the best (rank-0) chromosome; remaining ensemble members use their
+        GA-discovered genes as-is.
+
         All members receive the same already-preprocessed X_dev_pp / y_dev_pp.
         """
         ens_cfg = cfg.automl.ensemble
+        opt_cfg = cfg.automl.optuna
         top_k = ens_cfg.top_k if ens_cfg.enabled else 1
 
         # Collect unique top-k chromosomes from history (best first).
@@ -295,14 +303,50 @@ class AutoMLPipeline:
             candidates = [best_chrom]
 
         log.info(
-            "Building final model | ensemble=%s | top_k=%d | available=%d",
-            ens_cfg.enabled, top_k, len(candidates),
+            "Building final model | ensemble=%s | top_k=%d | available=%d | optuna=%s",
+            ens_cfg.enabled, top_k, len(candidates), opt_cfg.enabled,
         )
+
+        # --- Optuna HPO on the best chromosome (rank 0 only) ---------------
+        # We only tune the structural winner. Tuning every ensemble member
+        # would multiply cost without meaningful gain -- the ensemble itself
+        # already provides variance reduction.
+        tuned_model_genes_for_rank0 = None
+        if opt_cfg.enabled and cfg.automl.backend == "sklearn":
+            tuner = OptunaTuner(
+                n_trials=opt_cfg.n_trials,
+                timeout=opt_cfg.timeout,
+                use_cv=opt_cfg.use_cv,
+                n_cv_folds=opt_cfg.n_cv_folds,
+                verbose=opt_cfg.verbose,
+            )
+            tuned_model_genes_for_rank0 = tuner.tune(
+                best_chromosome=candidates[0],
+                X=X_dev_pp,
+                y=y_dev_pp,
+                problem_type=cfg.problem_type,
+                target_column=cfg.target_column,
+                metric=self._metric_name,
+                backend=cfg.automl.backend,
+                random_seed=cfg.genetic.random_seed,
+            )
+            log.info("Optuna tuned genes: %s", tuned_model_genes_for_rank0)
+        elif opt_cfg.enabled and cfg.automl.backend != "sklearn":
+            log.warning(
+                "OptunaTuner is only supported for backend='sklearn'. "
+                "backend=%r -- skipping HPO.", cfg.automl.backend,
+            )
+        # --------------------------------------------------------------------
 
         fitted_members = []
         fitness_weights = []
         for rank, chrom in enumerate(candidates):
-            _, model_genes = _split_genes(chrom.genes)
+            # Use Optuna-tuned genes for the best member; GA genes for the rest.
+            if rank == 0 and tuned_model_genes_for_rank0 is not None:
+                model_genes = tuned_model_genes_for_rank0
+            else:
+                _, model_genes = _split_genes(chrom.genes)
+
             model = build_automl(
                 backend=cfg.automl.backend,
                 problem_type=cfg.problem_type,
@@ -324,7 +368,7 @@ class AutoMLPipeline:
             )
 
         if len(fitted_members) == 1:
-            log.info("Only one member — returning single model (no ensemble overhead).")
+            log.info("Only one member -- returning single model (no ensemble overhead).")
             return fitted_members[0]
 
         # Regression fitness values are negative (negated MSE/MAE).

@@ -284,6 +284,28 @@ ensemble:
   weight_by_fitness: true   # weight members proportionally to their CV fitness
 
 # -----------------------------------------------------------------------------
+# E2. OPTUNA BAYESIAN HPO  (applied after the GA finishes)
+# -----------------------------------------------------------------------------
+# The GA discovers the best structural pipeline (model family, preprocessors,
+# feature engineering).  Optuna then fine-tunes the continuous model
+# hyperparameters (learning rate, depth, regularisation) using TPE — a
+# Bayesian method that is far more sample-efficient than the GA for this task.
+#
+# Only supported for backend: sklearn.
+# Requires: pip install optuna
+#
+# Typical result: +1-5% on top of the GA's best chromosome with 20-50 extra
+# model fits (each faster than a full k-fold CV because use_cv defaults to false).
+
+optuna:
+  enabled: false            # set true to activate HPO after the GA run
+  n_trials: 30              # number of Optuna trials (20-30 good default; 50-100 for production)
+  timeout: null             # hard wall-clock cap in seconds (null = no limit)
+  use_cv: false             # false = fast single 80/20 split per trial; true = full k-fold CV
+  n_cv_folds: 3             # folds when use_cv: true (ignored otherwise)
+  verbose: false            # true = show per-trial Optuna output in the log
+
+# -----------------------------------------------------------------------------
 # F. MODEL SEARCH SPACE
 # -----------------------------------------------------------------------------
 # Only the block matching your run.backend is used.
