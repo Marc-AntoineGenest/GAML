@@ -352,3 +352,9 @@ report:
 
   # Open the HTML report automatically in your browser when the run finishes.
   open_html_on_finish: false
+
+  # SHAP feature attribution summary embedded in the HTML report.
+  # Requires: pip install shap  (skipped gracefully if not installed).
+  # Only active for backend: sklearn tree models (lgbm, xgb, gbm, rf).
+  shap_enabled: true
+  shap_max_samples: 200     # rows sampled from dev set (higher = slower, more accurate)

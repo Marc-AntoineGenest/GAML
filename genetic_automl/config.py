@@ -317,6 +317,22 @@ class ReportConfig:
     open_html_on_finish: bool = False
     """Open the HTML report in the default browser when the run completes."""
 
+    shap_enabled: bool = True
+    """
+    Compute SHAP feature attributions after fitting the final model and
+    embed a summary bar chart in the HTML report.
+    Requires: pip install shap  (gracefully skipped if not installed).
+    Only supported for backend='sklearn' tree models (lgbm, xgb, gbm, rf).
+    Set to False to skip SHAP and keep report generation fast.
+    """
+
+    shap_max_samples: int = 200
+    """
+    Maximum number of rows from the dev set passed to shap.TreeExplainer.
+    Larger values = more accurate SHAP estimates but slower computation.
+    200 is a good default; use 500+ for production reports.
+    """
+
 
 @dataclass
 class PipelineConfig:

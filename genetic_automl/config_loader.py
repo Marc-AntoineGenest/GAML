@@ -173,6 +173,8 @@ def load_config(
         output_dir=str(rep_cfg.get("output_dir", "reports")),
         mlflow_tracking_uri=rep_cfg.get("mlflow_tracking_uri", "mlflow_runs") or None,
         open_html_on_finish=bool(rep_cfg.get("open_html_on_finish", False)),
+        shap_enabled=bool(rep_cfg.get("shap_enabled", True)),
+        shap_max_samples=int(rep_cfg.get("shap_max_samples", 200)),
     )
 
     config = PipelineConfig(

@@ -32,6 +32,7 @@ from genetic_automl.genetic.fitness import FitnessEvaluator, _split_genes
 from genetic_automl.genetic.optuna_tuner import OptunaTuner
 from genetic_automl.preprocessing.pipeline import PreprocessingConfig, PreprocessingPipeline
 from genetic_automl.reporting.html_reporter import HTMLReporter
+from genetic_automl.reporting.shap_explainer import SHAPExplainer
 from genetic_automl.reporting.mlflow_logger import MLflowLogger
 from genetic_automl.utils.logger import get_logger
 
@@ -175,6 +176,18 @@ class AutoMLPipeline:
         json_path = os.path.join(cfg.report.output_dir, f"run_{cfg.run_id}.json")
         mlflow_logger.save_json(self._history, json_path)
 
+        # --- SHAP feature attribution -----------------------------------
+        shap_summary = None
+        if cfg.report.shap_enabled:
+            shap_summary = SHAPExplainer(
+                max_samples=cfg.report.shap_max_samples,
+            ).explain(
+                model=self._best_model,
+                X=X_dev_pp,
+                feature_names=list(X_dev_pp.columns) if hasattr(X_dev_pp, "columns") else None,
+            )
+        # -----------------------------------------------------------------
+
         reporter = HTMLReporter(output_dir=cfg.report.output_dir)
         self._report_path = reporter.generate(
             config=cfg,
@@ -183,6 +196,7 @@ class AutoMLPipeline:
             final_metric_name=self._metric_name,
             preprocessing_summary=self._best_preprocessor.summary(),
             diversity_summary=engine.diversity_summary(),
+            shap_summary=shap_summary,
             open_browser=cfg.report.open_html_on_finish,
         )
         log.info("Report: %s", self._report_path)

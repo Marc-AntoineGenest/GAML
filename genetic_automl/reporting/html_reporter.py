@@ -39,6 +39,7 @@ class HTMLReporter:
         final_metric_name: Optional[str] = None,
         preprocessing_summary: Optional[Dict[str, Any]] = None,
         diversity_summary: Optional[Dict[str, Any]] = None,
+        shap_summary: Optional[Dict[str, Any]] = None,
         extra_info: Optional[Dict[str, Any]] = None,
         open_browser: bool = False,
     ) -> str:
@@ -53,6 +54,7 @@ class HTMLReporter:
             final_metric_name=final_metric_name,
             preprocessing_summary=preprocessing_summary or {},
             diversity_summary=diversity_summary or {},
+            shap_summary=shap_summary,
             extra_info=extra_info or {},
         )
 
@@ -77,6 +79,7 @@ class HTMLReporter:
         final_metric_name: Optional[str],
         preprocessing_summary: Dict[str, Any],
         diversity_summary: Dict[str, Any],
+        shap_summary: Optional[Dict[str, Any]],
         extra_info: Dict[str, Any],
     ) -> str:
         best = history.best
@@ -168,6 +171,51 @@ class HTMLReporter:
     Dropped by correlation filter: <code>{pp_dropped_str}</code>
   </p>"""
 
+        # --- SHAP section ------------------------------------------------
+        shap_section = ""
+        if shap_summary:
+            n_shap   = shap_summary.get("n_samples_used", 0)
+            base_val = shap_summary.get("base_value", 0.0)
+            svg      = shap_summary.get("shap_svg", "")
+            names    = shap_summary.get("feature_names", [])
+            vals     = shap_summary.get("mean_abs_shap", [])
+            shap_rows = "".join(
+                f'''<tr>
+                    <td>{i+1}</td>
+                    <td><code>{n}</code></td>
+                    <td class="{"fitness-best" if i == 0 else ""}">{v:.6f}</td>
+                </tr>'''
+                for i, (n, v) in enumerate(zip(names[:20], vals[:20]))
+            )
+            shap_section = f"""
+  <h2>SHAP Feature Importance</h2>
+  <div class="metrics-row">
+    <div class="metric-card">
+      <div class="metric-label">Samples Used</div>
+      <div class="metric-value" style="font-size:1.2rem">{n_shap}</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Model Base Value</div>
+      <div class="metric-value" style="font-size:1.2rem">{base_val:.4f}</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Features Explained</div>
+      <div class="metric-value" style="font-size:1.2rem">{len(names)}</div>
+    </div>
+  </div>
+  <div class="chart-container">{svg}</div>
+  <div class="table-wrapper" style="max-height:340px;margin-top:1rem">
+    <table>
+      <thead><tr><th>Rank</th><th>Feature</th><th>Mean |SHAP|</th></tr></thead>
+      <tbody>{shap_rows}</tbody>
+    </table>
+  </div>
+  <p style="color:#64748b;font-size:0.78rem;margin-top:0.5rem">
+    Mean |SHAP| = average absolute SHAP value across {n_shap} sampled rows.
+    Higher values indicate greater average impact on model output.
+  </p>"""
+        # -----------------------------------------------------------------
+
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -248,6 +296,8 @@ class HTMLReporter:
   </div>
 
   {pp_section}
+
+  {shap_section}
 
   <h2>Population Diversity</h2>
   <div class="metrics-row">
