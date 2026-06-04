@@ -143,6 +143,16 @@ def _cmd_fit(args: argparse.Namespace) -> int:
     if args.cv_folds is not None:
         config.genetic.n_cv_folds = args.cv_folds
 
+    if args.cv_strategy:
+        valid = {"stratified", "group", "timeseries"}
+        if args.cv_strategy not in valid:
+            _err(f"--cv-strategy must be one of {valid}, got '{args.cv_strategy}'")
+        config.genetic.cv_strategy = args.cv_strategy
+
+    if args.group_column:
+        config.genetic.group_column = args.group_column
+
+
     if args.seed is not None:
         config.genetic.random_seed = args.seed
 
@@ -151,6 +161,13 @@ def _cmd_fit(args: argparse.Namespace) -> int:
 
     if args.no_shap:
         config.report.shap_enabled = False
+
+    if args.calibrate:
+        config.automl.calibration.enabled = True
+
+    if args.calibration_method:
+        config.automl.calibration.method = args.calibration_method
+
 
     if args.run_name:
         config.run_name = args.run_name
@@ -344,6 +361,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Number of cross-validation folds for fitness evaluation.",
     )
     fit_p.add_argument(
+        "--cv-strategy",
+        metavar="STRATEGY",
+        default=None,
+        dest="cv_strategy",
+        choices=["stratified", "group", "timeseries"],
+        help="CV split strategy: stratified (default), group, or timeseries.",
+    )
+    fit_p.add_argument(
+        "--group-column",
+        metavar="COLUMN",
+        default=None,
+        dest="group_column",
+        help="Column name for group-based CV (required with --cv-strategy group).",
+    )
+    fit_p.add_argument(
         "--seed",
         metavar="INT",
         type=int,
@@ -375,6 +407,20 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         dest="no_shap",
         help="Disable SHAP feature attribution in the report (faster).",
+    )
+    fit_p.add_argument(
+        "--calibrate",
+        action="store_true",
+        dest="calibrate",
+        help="Enable post-hoc probability calibration on the final model.",
+    )
+    fit_p.add_argument(
+        "--calibration-method",
+        metavar="METHOD",
+        default=None,
+        dest="calibration_method",
+        choices=["sigmoid", "isotonic"],
+        help="Calibration method: sigmoid (default) or isotonic.",
     )
     fit_p.set_defaults(func=_cmd_fit)
 

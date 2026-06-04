@@ -1,5 +1,7 @@
 # GAML — Genetic AutoML
 
+[![CI](https://github.com/Marc-AntoineGenest/GAML/actions/workflows/ci.yml/badge.svg)](https://github.com/Marc-AntoineGenest/GAML/actions/workflows/ci.yml)
+
 A genetic algorithm that simultaneously searches over **preprocessing pipelines** and **model hyperparameters** for tabular data. Every candidate is scored with cross-validation; the best configuration is automatically selected and refit on your full dataset.
 
 ---

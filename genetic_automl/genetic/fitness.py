@@ -22,7 +22,7 @@ from typing import List, Optional
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold, KFold
+from sklearn.model_selection import StratifiedKFold, KFold, StratifiedGroupKFold, GroupKFold, TimeSeriesSplit
 
 from genetic_automl.automl import build_automl
 from genetic_automl.core.problem import (
@@ -86,6 +86,8 @@ class FitnessEvaluator:
         asha_enabled: bool = True,
         asha_min_folds_before_prune: int = 1,
         asha_prune_margin: float = 0.0,
+        cv_strategy: str = "stratified",
+        group_column: Optional[str] = None,
     ) -> None:
         self.problem_type = problem_type
         self.target_column = target_column
@@ -100,6 +102,8 @@ class FitnessEvaluator:
         self.asha_enabled = asha_enabled
         self.asha_min_folds_before_prune = asha_min_folds_before_prune
         self.asha_prune_margin = asha_prune_margin
+        self.cv_strategy = cv_strategy
+        self.group_column = group_column
         self._cache: dict = {}
         self._cache_hits: int = 0
         # Shared pool of all individual fold scores seen across every chromosome
@@ -153,11 +157,35 @@ class FitnessEvaluator:
 
             cv = self._build_cv(y_train)
 
-            for fold_idx, (train_idx, val_idx) in enumerate(cv.split(X_train, y_train)):
+            # For group CV: extract group array; drop group col from features.
+            groups = None
+            if self.cv_strategy == "group" and self.group_column:
+                if self.group_column in X_train.columns:
+                    groups = X_train[self.group_column].values
+                else:
+                    log.warning(
+                        "group_column='%s' not found in X_train columns — "
+                        "falling back to stratified split.", self.group_column,
+                    )
+
+            # TimeSeriesSplit.split() does not accept a y argument.
+            if self.cv_strategy == "timeseries":
+                split_iter = cv.split(X_train)
+            elif self.cv_strategy == "group" and groups is not None:
+                split_iter = cv.split(X_train, y_train, groups=groups)
+            else:
+                split_iter = cv.split(X_train, y_train)
+
+            for fold_idx, (train_idx, val_idx) in enumerate(split_iter):
                 X_fold_train = X_train.iloc[train_idx].reset_index(drop=True)
                 y_fold_train = y_train.iloc[train_idx].reset_index(drop=True)
                 X_fold_val   = X_train.iloc[val_idx].reset_index(drop=True)
                 y_fold_val   = y_train.iloc[val_idx].reset_index(drop=True)
+
+                # Drop group column from features — it must not be used in training.
+                if self.group_column and self.group_column in X_fold_train.columns:
+                    X_fold_train = X_fold_train.drop(columns=[self.group_column])
+                    X_fold_val   = X_fold_val.drop(columns=[self.group_column])
 
                 pp_config = PreprocessingConfig.from_genes(pp_genes)
                 pp = PreprocessingPipeline(
@@ -287,7 +315,28 @@ class FitnessEvaluator:
         return self.surrogate.summary()
 
     def _build_cv(self, y: pd.Series):
-        """Stratified KFold for classification, regular KFold for regression."""
+        """
+        Build the appropriate CV splitter based on cv_strategy.
+
+        Strategy       Splitter                           Use case
+        ----------     --------------------------------   ----------------------------
+        stratified     StratifiedKFold / KFold            Default; works for all data
+        group          StratifiedGroupKFold / GroupKFold   Grouped data (patients, stores)
+        timeseries     TimeSeriesSplit                    Temporal data; no shuffling
+        """
+        strategy = self.cv_strategy
+
+        if strategy == "timeseries":
+            # TimeSeriesSplit preserves order — no shuffle, no random_state needed.
+            return TimeSeriesSplit(n_splits=self.n_folds)
+
+        if strategy == "group":
+            if self.problem_type == ProblemType.REGRESSION:
+                return GroupKFold(n_splits=self.n_folds)
+            return StratifiedGroupKFold(n_splits=self.n_folds, shuffle=True,
+                                        random_state=self.random_seed)
+
+        # Default: "stratified"
         if self.problem_type == ProblemType.REGRESSION:
             return KFold(n_splits=self.n_folds, shuffle=True, random_state=self.random_seed)
         return StratifiedKFold(n_splits=self.n_folds, shuffle=True, random_state=self.random_seed)

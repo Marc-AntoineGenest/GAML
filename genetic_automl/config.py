@@ -185,6 +185,31 @@ class GeneticConfig:
     None (default) = start fresh.
     """
 
+    # CV split strategy
+    cv_strategy: str = "stratified"
+    """
+    Cross-validation split strategy used when evaluating each chromosome.
+
+    Options:
+      "stratified"  — StratifiedKFold for classification, KFold for regression
+                      (default; safe for all datasets).
+      "group"       — StratifiedGroupKFold / GroupKFold; requires
+                      data_config.group_column to identify group membership.
+                      Prevents the same group from appearing in both train and
+                      val folds — essential for patient/customer/store datasets.
+      "timeseries"  — TimeSeriesSplit; preserves temporal ordering, training
+                      always precedes validation. No shuffling. Use for
+                      any dataset where rows have a meaningful time axis.
+    """
+
+    group_column: Optional[str] = None
+    """
+    Name of the group column in the input DataFrame.
+    Required when cv_strategy="group"; ignored otherwise.
+    The column is used only for fold assignment and is automatically
+    excluded from model features.
+    """
+
     random_seed: int = 42
 
 
@@ -263,6 +288,48 @@ class OptunaConfig:
 
 
 @dataclass
+class CalibrationConfig:
+    """
+    Post-hoc probability calibration applied to the final classification model.
+
+    Tree-based models (GBM, RF, XGBoost, LightGBM) often produce uncalibrated
+    probabilities — a predicted score of 0.9 may not correspond to a 90% true
+    positive rate.  Calibration corrects this using cross-validated held-out
+    predictions, improving log-loss, reliability diagrams, and downstream
+    decision-making.
+
+    Only applied for classification tasks; silently skipped for regression.
+    Requires backend="sklearn".
+
+    Methods:
+      sigmoid  — Platt scaling (logistic regression on model outputs).
+                 Works well when the model is already fairly well-calibrated.
+      isotonic — Non-parametric isotonic regression.
+                 More powerful but requires more data (>1000 samples recommended).
+    """
+
+    enabled: bool = False
+    """
+    Enable post-hoc probability calibration.
+    Default False so existing runs are unaffected until explicitly opted in.
+    Requires: pip install scikit-learn (always available).
+    """
+
+    method: str = "sigmoid"
+    """
+    Calibration method: 'sigmoid' (Platt scaling) or 'isotonic'.
+    sigmoid  — fast, works well for most datasets.
+    isotonic — more flexible; needs >= 1000 training samples to be reliable.
+    """
+
+    cv: int = 5
+    """
+    Number of cross-validation folds used internally by CalibratedClassifierCV
+    to fit the calibrator.  Higher values = more accurate calibration but slower.
+    """
+
+
+@dataclass
 class AutoMLConfig:
     """AutoML backend settings."""
 
@@ -280,6 +347,9 @@ class AutoMLConfig:
 
     optuna: OptunaConfig = field(default_factory=OptunaConfig)
     """Optuna Bayesian HPO configuration — applied after the GA finishes."""
+
+    calibration: CalibrationConfig = field(default_factory=CalibrationConfig)
+    """Post-hoc probability calibration — applied to the final classification model."""
 
     extra_kwargs: Dict[str, Any] = field(default_factory=dict)
     """Additional kwargs forwarded verbatim to the backend constructor."""

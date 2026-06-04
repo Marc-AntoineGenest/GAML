@@ -91,6 +91,21 @@ genetic:
   # Recommended: 3 for fast iteration, 5 for production runs.
   n_cv_folds: 3
 
+  # Cross-validation split strategy.
+  # Options:
+  #   stratified — StratifiedKFold (classification) / KFold (regression). Default.
+  #   group      — StratifiedGroupKFold; requires group_column to be set below.
+  #                Prevents the same group (e.g. patient ID, store ID) from
+  #                appearing in both train and validation folds.
+  #   timeseries — TimeSeriesSplit; preserves temporal ordering. No shuffling.
+  #                Use when rows have a meaningful time axis.
+  cv_strategy: stratified
+
+  # Column name used for group-based CV (cv_strategy: group only).
+  # The column is used for fold assignment only and excluded from model features.
+  # Set to null when not applicable.
+  group_column: null
+
   # Stop if the best fitness score does not improve for this many consecutive
   # generations.
   early_stopping_rounds: 5
@@ -304,6 +319,24 @@ optuna:
   use_cv: false             # false = fast single 80/20 split per trial; true = full k-fold CV
   n_cv_folds: 3             # folds when use_cv: true (ignored otherwise)
   verbose: false            # true = show per-trial Optuna output in the log
+
+# -----------------------------------------------------------------------------
+# E3. PROBABILITY CALIBRATION  (applied after the GA + optional Optuna tuning)
+# -----------------------------------------------------------------------------
+# Tree models often produce uncalibrated probabilities. CalibratedClassifierCV
+# corrects this using cross-validated held-out predictions.
+#
+# Only applied for classification tasks; silently skipped for regression.
+# Requires: backend: sklearn
+#
+# Methods:
+#   sigmoid  — Platt scaling. Fast; good for most datasets.
+#   isotonic — More flexible; needs >= 1000 samples to be reliable.
+
+calibration:
+  enabled: false          # set true to calibrate final model probabilities
+  method: sigmoid         # sigmoid (Platt) or isotonic
+  cv: 5                   # internal CV folds for the calibrator
 
 # -----------------------------------------------------------------------------
 # F. MODEL SEARCH SPACE

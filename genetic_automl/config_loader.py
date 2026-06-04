@@ -19,6 +19,7 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 from genetic_automl.config import (
+    CalibrationConfig,
     AutoMLConfig,
     DataConfig,
     EnsembleConfig,
@@ -142,6 +143,8 @@ def load_config(
         checkpoint_dir=gen_cfg.get("checkpoint_dir") or None,
         checkpoint_every=int(gen_cfg.get("checkpoint_every", 1)),
         resume_from_checkpoint=gen_cfg.get("resume_from_checkpoint") or None,
+        cv_strategy=str(gen_cfg.get("cv_strategy", "stratified")),
+        group_column=gen_cfg.get("group_column") or None,
         random_seed=int(gen_cfg.get("random_seed", 42)),
     )
 
@@ -166,6 +169,13 @@ def load_config(
         use_cv=bool(opt_raw.get("use_cv", False)),
         n_cv_folds=int(opt_raw.get("n_cv_folds", 3)),
         verbose=bool(opt_raw.get("verbose", False)),
+    )
+
+    cal_raw = raw.get("calibration", {})
+    automl.calibration = CalibrationConfig(
+        enabled=bool(cal_raw.get("enabled", False)),
+        method=str(cal_raw.get("method", "sigmoid")),
+        cv=int(cal_raw.get("cv", 5)),
     )
 
     rep_cfg = raw.get("report", {})

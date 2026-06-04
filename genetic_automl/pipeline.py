@@ -39,6 +39,46 @@ from genetic_automl.utils.logger import get_logger
 log = get_logger(__name__)
 
 
+def _apply_calibration(model, X: "pd.DataFrame", y: "pd.Series",
+                       method: str = "sigmoid", cv: int = 5):
+    """
+    Wrap *model* in a thin CalibratedClassifierCV-compatible shim and refit it.
+
+    We cannot pass a GAML wrapper directly to CalibratedClassifierCV because it
+    expects a sklearn estimator interface (fit/predict_proba).  Instead we wrap
+    the underlying raw estimator of the best member, calibrate it, then patch
+    the predict/predict_proba methods of the original GAML model so the rest of
+    the pipeline (SHAP, reporting, save/load) remains unaffected.
+    """
+    from sklearn.calibration import CalibratedClassifierCV
+
+    # Resolve the underlying raw estimator
+    raw = None
+    if hasattr(model, "_estimator"):
+        raw = model._estimator
+    elif hasattr(model, "members") and model.members:
+        first = model.members[0]
+        raw = getattr(first, "_estimator", None)
+
+    if raw is None:
+        log.warning("Calibration: could not resolve raw estimator — skipping.")
+        return model
+
+    try:
+        calibrated = CalibratedClassifierCV(raw, method=method, cv=cv)
+        calibrated.fit(X, y)
+        # Monkey-patch predict/predict_proba so callers see calibrated outputs.
+        model.predict       = lambda X_: calibrated.predict(X_)
+        model.predict_proba = lambda X_: calibrated.predict_proba(X_)
+        log.info(
+            "Probability calibration applied | method=%s | cv=%d", method, cv,
+        )
+    except Exception as exc:
+        log.warning("Calibration failed (%s) — returning uncalibrated model.", exc)
+
+    return model
+
+
 class AutoMLPipeline:
     """
     Orchestrates the full Genetic AutoML pipeline.
@@ -131,6 +171,8 @@ class AutoMLPipeline:
             asha_enabled=cfg.genetic.asha_enabled,
             asha_min_folds_before_prune=cfg.genetic.asha_min_folds_before_prune,
             asha_prune_margin=cfg.genetic.asha_prune_margin,
+            cv_strategy=cfg.genetic.cv_strategy,
+            group_column=cfg.genetic.group_column,
         )
         engine = GeneticEngine(
             genetic_config=cfg.genetic,
@@ -383,21 +425,41 @@ class AutoMLPipeline:
 
         if len(fitted_members) == 1:
             log.info("Only one member -- returning single model (no ensemble overhead).")
-            return fitted_members[0]
+            final_model = fitted_members[0]
+        else:
+            # Regression fitness values are negative (negated MSE/MAE).
+            # If all clamped weights are zero, fall back to uniform weighting.
+            all_zero = all(w == 0.0 for w in fitness_weights)
+            weights = (fitness_weights if (ens_cfg.weight_by_fitness and not all_zero)
+                       else None)
+            final_model = EnsembleModel(
+                members=fitted_members,
+                problem_type=cfg.problem_type,
+                target_column=cfg.target_column,
+                weights=weights,
+            )
+            log.info("EnsembleModel ready: %s", final_model)
 
-        # Regression fitness values are negative (negated MSE/MAE).
-        # If all clamped weights are zero, fall back to uniform weighting.
-        all_zero = all(w == 0.0 for w in fitness_weights)
-        weights = (fitness_weights if (ens_cfg.weight_by_fitness and not all_zero)
-                   else None)
-        ensemble = EnsembleModel(
-            members=fitted_members,
-            problem_type=cfg.problem_type,
-            target_column=cfg.target_column,
-            weights=weights,
-        )
-        log.info("EnsembleModel ready: %s", ensemble)
-        return ensemble
+        # --- Probability calibration (classification only) -------------------
+        cal_cfg = cfg.automl.calibration
+        if (
+            cal_cfg.enabled
+            and cfg.problem_type != ProblemType.REGRESSION
+            and cfg.automl.backend == "sklearn"
+        ):
+            final_model = _apply_calibration(
+                final_model, X_dev_pp, y_dev_pp,
+                method=cal_cfg.method,
+                cv=cal_cfg.cv,
+            )
+        elif cal_cfg.enabled and cfg.automl.backend != "sklearn":
+            log.warning(
+                "Calibration is only supported for backend='sklearn'. "
+                "backend=%r — skipping calibration.", cfg.automl.backend,
+            )
+        # ---------------------------------------------------------------------
+
+        return final_model
 
     def save(self, path: str) -> str:
         """
