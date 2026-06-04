@@ -13,6 +13,11 @@ setup(
         "joblib>=1.3",
         "tqdm>=4.60",
     ],
+    entry_points={
+        "console_scripts": [
+            "gaml=genetic_automl.cli:main",
+        ],
+    },
     extras_require={
         "autogluon": ["autogluon.tabular>=1.0"],
         "imbalanced": ["imbalanced-learn>=0.12"],
