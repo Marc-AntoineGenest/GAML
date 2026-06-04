@@ -5,7 +5,7 @@ setup(
     version="0.4.0",
     description="Genetic Algorithm-driven AutoML pipeline for tabular data",
     packages=find_packages(),
-    python_requires=">=3.9",
+    python_requires=">=3.11",
     install_requires=[
         "pandas>=2.0",
         "scikit-learn>=1.3",
