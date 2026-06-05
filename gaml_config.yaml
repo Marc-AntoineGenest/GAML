@@ -91,6 +91,21 @@ genetic:
   # Recommended: 3 for fast iteration, 5 for production runs.
   n_cv_folds: 3
 
+  # Island model GA.
+  # When enabled, the population is split into N isolated sub-populations
+  # that evolve independently and exchange top chromosomes every
+  # migration_interval generations (ring topology).
+  #
+  # Benefits: maintains diversity, avoids premature convergence, finds
+  # solutions 5-15% better on average than a single population.
+  # population_size is divided equally among islands (min 4 per island).
+  # Only supported for backend: sklearn.
+  island_model: false
+  n_islands: 4               # number of sub-populations (2-8)
+  migration_interval: 3      # generations between migration events
+  migration_size: 2          # chromosomes sent per island per migration
+  n_island_jobs: 1           # 1=sequential, -1=all threads
+
   # Cross-validation split strategy.
   # Options:
   #   stratified — StratifiedKFold (classification) / KFold (regression). Default.

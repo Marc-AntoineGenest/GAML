@@ -28,6 +28,7 @@ from genetic_automl.core.base_automl import BaseAutoML
 from genetic_automl.core.data import DataManager
 from genetic_automl.core.problem import get_default_metric, ProblemType
 from genetic_automl.genetic.engine import EvolutionHistory, GeneticEngine
+from genetic_automl.genetic.island_engine import IslandEngine
 from genetic_automl.genetic.fitness import FitnessEvaluator, _split_genes
 from genetic_automl.genetic.optuna_tuner import OptunaTuner
 from genetic_automl.preprocessing.pipeline import PreprocessingConfig, PreprocessingPipeline
@@ -174,12 +175,32 @@ class AutoMLPipeline:
             cv_strategy=cfg.genetic.cv_strategy,
             group_column=cfg.genetic.group_column,
         )
-        engine = GeneticEngine(
-            genetic_config=cfg.genetic,
-            evaluator=evaluator,
-            backend=cfg.automl.backend,
-            gene_space_overrides=self._gene_space_overrides,
-        )
+        if cfg.genetic.island_model:
+            log.info(
+                "Island model enabled | n_islands=%d | migration_interval=%d | "
+                "migration_size=%d | n_island_jobs=%d",
+                cfg.genetic.n_islands,
+                cfg.genetic.migration_interval,
+                cfg.genetic.migration_size,
+                cfg.genetic.n_island_jobs,
+            )
+            engine = IslandEngine(
+                genetic_config=cfg.genetic,
+                evaluator=evaluator,
+                backend=cfg.automl.backend,
+                n_islands=cfg.genetic.n_islands,
+                migration_interval=cfg.genetic.migration_interval,
+                migration_size=cfg.genetic.migration_size,
+                n_island_jobs=cfg.genetic.n_island_jobs,
+                gene_space_overrides=self._gene_space_overrides,
+            )
+        else:
+            engine = GeneticEngine(
+                genetic_config=cfg.genetic,
+                evaluator=evaluator,
+                backend=cfg.automl.backend,
+                gene_space_overrides=self._gene_space_overrides,
+            )
         best_chrom = engine.run(X_train, y_train)
         self._history = engine.history
 

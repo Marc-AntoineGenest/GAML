@@ -152,6 +152,18 @@ def _cmd_fit(args: argparse.Namespace) -> int:
     if args.group_column:
         config.genetic.group_column = args.group_column
 
+    if args.island_model:
+        config.genetic.island_model = True
+
+    if args.n_islands is not None:
+        config.genetic.n_islands = args.n_islands
+
+    if args.migration_interval is not None:
+        config.genetic.migration_interval = args.migration_interval
+
+    if args.migration_size is not None:
+        config.genetic.migration_size = args.migration_size
+
 
     if args.seed is not None:
         config.genetic.random_seed = args.seed
@@ -407,6 +419,36 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         dest="no_shap",
         help="Disable SHAP feature attribution in the report (faster).",
+    )
+    fit_p.add_argument(
+        "--island-model",
+        action="store_true",
+        dest="island_model",
+        help="Enable island model GA (multiple sub-populations with migration).",
+    )
+    fit_p.add_argument(
+        "--n-islands",
+        metavar="N",
+        type=int,
+        default=None,
+        dest="n_islands",
+        help="Number of islands for island model GA (default 4).",
+    )
+    fit_p.add_argument(
+        "--migration-interval",
+        metavar="N",
+        type=int,
+        default=None,
+        dest="migration_interval",
+        help="Generations between migration events (default 3).",
+    )
+    fit_p.add_argument(
+        "--migration-size",
+        metavar="N",
+        type=int,
+        default=None,
+        dest="migration_size",
+        help="Chromosomes migrated per island per event (default 2).",
     )
     fit_p.add_argument(
         "--calibrate",
