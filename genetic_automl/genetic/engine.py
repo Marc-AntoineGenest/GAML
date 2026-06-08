@@ -43,6 +43,11 @@ from genetic_automl.genetic.operators import (
     tournament_selection,
 )
 from genetic_automl.genetic.warm_start import WarmStart
+from genetic_automl.genetic.nsga2 import (
+    build_objective_values, crowding_distance_assignment,
+    fast_non_dominated_sort, nsga2_select, nsga2_survive,
+    pareto_front_summary,
+)
 from genetic_automl.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -66,6 +71,8 @@ class GenerationStats:
 class EvolutionHistory:
     generations: List[GenerationStats] = field(default_factory=list)
     all_chromosomes: List[Chromosome] = field(default_factory=list)
+    pareto_front: List[dict] = field(default_factory=list)
+    """Pareto-front summary populated when nsga2_enabled=True."""
 
     @property
     def best(self) -> Optional[Chromosome]:
@@ -302,7 +309,26 @@ class GeneticEngine:
                 break
 
             if gen_idx < cfg.generations - 1:
-                population = self._breed(population, gen_idx + 1, current_mut_rate)
+                # Compute multi-objective values for NSGA-II selection
+                obj_vals = None
+                if cfg.nsga2_enabled:
+                    objectives = cfg.nsga2_objectives or [self.evaluator.metric, "complexity"]
+                    obj_vals = build_objective_values(population, objectives)
+                population = self._breed(
+                    population, gen_idx + 1, current_mut_rate,
+                    objective_values=obj_vals,
+                )
+
+        # Store Pareto front in history when NSGA-II was active
+        if cfg.nsga2_enabled:
+            objectives = cfg.nsga2_objectives or [self.evaluator.metric, "complexity"]
+            self.history.pareto_front = pareto_front_summary(
+                self.history.all_chromosomes, objectives
+            )
+            log.info(
+                "Pareto front size: %d | objectives: %s",
+                len(self.history.pareto_front), objectives,
+            )
 
         best = self.history.best
         div_summary = self._diversity.summary()
@@ -444,18 +470,66 @@ class GeneticEngine:
         population: List[Chromosome],
         next_gen: int,
         mutation_rate: float,
+        objective_values: Optional[Dict] = None,
     ) -> List[Chromosome]:
-        """Produce the next generation using selection, crossover, and mutation."""
-        new_pop: List[Chromosome] = []
+        """
+        Produce the next generation using selection, crossover, and mutation.
 
-        elite_individuals = elites(population, self.cfg.elite_ratio)
-        new_pop.extend(elite_individuals)
+        When nsga2_enabled=True:
+          - Uses nsga2_select (rank + crowding-distance tournament) instead of
+            fitness-only tournament selection.
+          - After generating offspring, applies nsga2_survive to select the
+            best n individuals from combined parents + offspring.
+
+        When nsga2_enabled=False (default):
+          - Standard elitism + fitness tournament (original behaviour).
+        """
+        use_nsga2 = self.cfg.nsga2_enabled and objective_values is not None
 
         crossover_fn = (
             uniform_crossover
             if self.cfg.crossover_type == "uniform"
             else single_point_crossover
         )
+
+        if use_nsga2:
+            # NSGA-II: stamp ranks and crowding distances on current population
+            fronts = fast_non_dominated_sort(population, objective_values)
+            n_obj = len(next(iter(objective_values.values()), []))
+            for front in fronts:
+                crowding_distance_assignment(front, objective_values, n_obj)
+
+            # Generate offspring (same size as population)
+            offspring: List[Chromosome] = []
+            while len(offspring) < self.cfg.population_size:
+                if self._rng.random() < self.cfg.crossover_rate:
+                    parent_a = nsga2_select(population, self._rng)
+                    parent_b = nsga2_select(population, self._rng)
+                    child_a, child_b = crossover_fn(parent_a, parent_b, self._rng)
+                    for child in (child_a, child_b):
+                        if len(offspring) < self.cfg.population_size:
+                            child = mutate(child, self.backend, mutation_rate,
+                                           self._rng, self._gene_space, self._gene_space_dict)
+                            child.generation = next_gen
+                            offspring.append(child)
+                else:
+                    parent = nsga2_select(population, self._rng)
+                    child = mutate(parent, self.backend, mutation_rate,
+                                   self._rng, self._gene_space, self._gene_space_dict)
+                    child.generation = next_gen
+                    offspring.append(child)
+
+            # Environmental selection: survive from combined pool
+            combined = population + offspring
+            survived = nsga2_survive(combined, self.cfg.population_size,
+                                     objective_values, n_obj)
+            return survived[: self.cfg.population_size]
+
+        # --- Standard single-objective breeding (original behaviour) --------
+        new_pop: List[Chromosome] = []
+        elite_individuals = elites(population, self.cfg.elite_ratio)
+        new_pop.extend(elite_individuals)
+
         while len(new_pop) < self.cfg.population_size:
             if self._rng.random() < self.cfg.crossover_rate:
                 parent_a = tournament_selection(population, self.cfg.tournament_size, self._rng)
@@ -463,12 +537,14 @@ class GeneticEngine:
                 child_a, child_b = crossover_fn(parent_a, parent_b, self._rng)
                 for child in (child_a, child_b):
                     if len(new_pop) < self.cfg.population_size:
-                        child = mutate(child, self.backend, mutation_rate, self._rng, self._gene_space, self._gene_space_dict)
+                        child = mutate(child, self.backend, mutation_rate,
+                                       self._rng, self._gene_space, self._gene_space_dict)
                         child.generation = next_gen
                         new_pop.append(child)
             else:
                 parent = tournament_selection(population, self.cfg.tournament_size, self._rng)
-                child = mutate(parent, self.backend, mutation_rate, self._rng, self._gene_space, self._gene_space_dict)
+                child = mutate(parent, self.backend, mutation_rate,
+                               self._rng, self._gene_space, self._gene_space_dict)
                 child.generation = next_gen
                 new_pop.append(child)
 

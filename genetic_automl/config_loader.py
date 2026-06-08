@@ -150,6 +150,8 @@ def load_config(
         n_island_jobs=int(gen_cfg.get("n_island_jobs", 1)),
         cv_strategy=str(gen_cfg.get("cv_strategy", "stratified")),
         group_column=gen_cfg.get("group_column") or None,
+        nsga2_enabled=bool(gen_cfg.get("nsga2_enabled", False)),
+        nsga2_objectives=gen_cfg.get("nsga2_objectives") or None,
         random_seed=int(gen_cfg.get("random_seed", 42)),
     )
 

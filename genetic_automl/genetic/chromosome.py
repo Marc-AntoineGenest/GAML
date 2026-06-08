@@ -134,6 +134,8 @@ class Chromosome:
     genes: Dict[str, Any]
     fitness: Optional[float] = None
     fitness_std: Optional[float] = None
+    extra_scores: Optional[Dict[str, float]] = None
+    """Secondary objective scores for NSGA-II (metric_name -> score)."""
     generation: int = 0
     parent_ids: List[str] = field(default_factory=list)
     id: str = field(default_factory=lambda: _random_id())
@@ -143,6 +145,7 @@ class Chromosome:
             genes=copy.deepcopy(self.genes),
             fitness=self.fitness,
             fitness_std=self.fitness_std,
+            extra_scores=dict(self.extra_scores) if self.extra_scores else None,
             generation=self.generation,
             parent_ids=list(self.parent_ids),
         )

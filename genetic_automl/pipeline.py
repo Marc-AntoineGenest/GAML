@@ -260,6 +260,7 @@ class AutoMLPipeline:
             preprocessing_summary=self._best_preprocessor.summary(),
             diversity_summary=engine.diversity_summary(),
             shap_summary=shap_summary,
+            pareto_front=self._history.pareto_front if self._history else [],
             open_browser=cfg.report.open_html_on_finish,
         )
         log.info("Report: %s", self._report_path)

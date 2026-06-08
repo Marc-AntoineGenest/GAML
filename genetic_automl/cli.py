@@ -152,6 +152,12 @@ def _cmd_fit(args: argparse.Namespace) -> int:
     if args.group_column:
         config.genetic.group_column = args.group_column
 
+    if args.nsga2:
+        config.genetic.nsga2_enabled = True
+
+    if args.objectives:
+        config.genetic.nsga2_objectives = args.objectives
+
     if args.island_model:
         config.genetic.island_model = True
 
@@ -449,6 +455,20 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         dest="migration_size",
         help="Chromosomes migrated per island per event (default 2).",
+    )
+    fit_p.add_argument(
+        "--nsga2",
+        action="store_true",
+        dest="nsga2",
+        help="Enable NSGA-II multi-objective selection.",
+    )
+    fit_p.add_argument(
+        "--objectives",
+        metavar="OBJ",
+        nargs="+",
+        default=None,
+        dest="objectives",
+        help="Objective names for NSGA-II (e.g. f1_macro complexity).",
     )
     fit_p.add_argument(
         "--calibrate",

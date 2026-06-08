@@ -40,6 +40,7 @@ class HTMLReporter:
         preprocessing_summary: Optional[Dict[str, Any]] = None,
         diversity_summary: Optional[Dict[str, Any]] = None,
         shap_summary: Optional[Dict[str, Any]] = None,
+        pareto_front: Optional[List[dict]] = None,
         extra_info: Optional[Dict[str, Any]] = None,
         open_browser: bool = False,
     ) -> str:
@@ -55,6 +56,7 @@ class HTMLReporter:
             preprocessing_summary=preprocessing_summary or {},
             diversity_summary=diversity_summary or {},
             shap_summary=shap_summary,
+            pareto_front=pareto_front or [],
             extra_info=extra_info or {},
         )
 
@@ -80,6 +82,7 @@ class HTMLReporter:
         preprocessing_summary: Dict[str, Any],
         diversity_summary: Dict[str, Any],
         shap_summary: Optional[Dict[str, Any]],
+        pareto_front: List[dict],
         extra_info: Dict[str, Any],
     ) -> str:
         best = history.best
@@ -216,6 +219,38 @@ class HTMLReporter:
   </p>"""
         # -----------------------------------------------------------------
 
+        # --- Pareto front section ------------------------------------
+        pareto_section = ""
+        if pareto_front:
+            obj_names = list(pareto_front[0].get("objectives", {}).keys()) if pareto_front else []
+            pareto_rows = "".join(
+                f'<tr><td>{i+1}</td><td><code>{p["id"][:8]}</code></td>'
+                + "".join(f'<td>{v:.4f}</td>' for v in p.get("objectives", {}).values())
+                + f'<td>{p.get("crowding", 0):.3f}</td>'
+                + f'<td><code>{p.get("key_genes", {}).get("model_type", "")}</code></td></tr>'
+                for i, p in enumerate(pareto_front[:25])
+            )
+            obj_headers = "".join(f"<th>{o}</th>" for o in obj_names)
+            pareto_section = (
+                f'''<h2>NSGA-II Pareto Front</h2>'''
+                f'''<div class="metrics-row">'''
+                f'''  <div class="metric-card">'''
+                f'''    <div class="metric-label">Pareto-Optimal Solutions</div>'''
+                f'''    <div class="metric-value" style="font-size:1.4rem">{len(pareto_front)}</div>'''
+                f'''  </div>'''
+                f'''  <div class="metric-card">'''
+                f'''    <div class="metric-label">Objectives</div>'''
+                f'''    <div class="metric-value" style="font-size:0.9rem">{' / '.join(obj_names)}</div>'''
+                f'''  </div></div>'''
+                f'''<div class="table-wrapper" style="max-height:360px"><table>'''
+                f'''<thead><tr><th>#</th><th>ID</th>{obj_headers}<th>Crowding</th><th>Model</th></tr></thead>'''
+                f'''<tbody>{pareto_rows}</tbody></table></div>'''
+                f'''<p style="color:#64748b;font-size:0.78rem;margin-top:0.5rem">'''
+                "Rank-0 Pareto front: no solution is strictly better on all objectives. "
+                "Sorted by crowding distance (more isolated = more diverse trade-off).</p>"
+            )
+        # -------------------------------------------------------------
+
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -298,6 +333,8 @@ class HTMLReporter:
   {pp_section}
 
   {shap_section}
+
+  {pareto_section}
 
   <h2>Population Diversity</h2>
   <div class="metrics-row">

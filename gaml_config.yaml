@@ -97,6 +97,20 @@ genetic:
   # migration_interval generations (ring topology).
   #
   # Benefits: maintains diversity, avoids premature convergence, finds
+  # NSGA-II multi-objective
+  # When enabled, the GA maintains a Pareto front instead of a single fitness
+  # score. Solutions are ranked by non-domination and crowding distance.
+  # The final model is still selected by the primary metric (first objective).
+  #
+  # Built-in special objectives (no extra CV needed):
+  #   complexity — negated n_estimators (fewer trees = simpler = better)
+  #   latency    — negated fit duration
+  nsga2_enabled: false
+  nsga2_objectives:             # null = [primary_metric, complexity]
+    - f1_macro
+    - complexity
+
+  # Island model GA
   # solutions 5-15% better on average than a single population.
   # population_size is divided equally among islands (min 4 per island).
   # Only supported for backend: sklearn.

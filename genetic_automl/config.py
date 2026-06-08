@@ -185,6 +185,43 @@ class GeneticConfig:
     None (default) = start fresh.
     """
 
+    # NSGA-II multi-objective
+    nsga2_enabled: bool = False
+    """
+    Enable NSGA-II multi-objective selection.
+
+    When True, the GA maintains a Pareto front instead of ranking by a single
+    scalar fitness score.  Solutions are ranked by non-domination (front 0 is
+    the Pareto-optimal set) and crowding distance (prefer diverse solutions
+    within the same front).
+
+    The final model is still selected by the primary metric (best scalar score
+    on the first objective), so ensemble, calibration, and SHAP are unaffected.
+
+    Typical objective combinations:
+      [f1_macro, roc_auc]         — accuracy vs. discrimination
+      [f1_macro, complexity]      — accuracy vs. model size
+      [roc_auc, latency]          — discrimination vs. speed
+    """
+
+    nsga2_objectives: Optional[List[str]] = None
+    """
+    List of objective names for NSGA-II.
+    First entry = primary metric (used to select final model).
+    Remaining entries = secondary objectives.
+
+    Built-in special objectives (no CV evaluation needed):
+      complexity  — negated n_estimators (fewer = simpler = better)
+      latency     — negated fit duration measured during evaluation
+
+    Any metric name from the registry also works as a secondary objective
+    if it was computed during fitness evaluation and stored in
+    Chromosome.extra_scores.
+
+    Defaults to [primary_metric, complexity] when nsga2_enabled=True and
+    this field is None.
+    """
+
     # Island model GA
     island_model: bool = False
     """
