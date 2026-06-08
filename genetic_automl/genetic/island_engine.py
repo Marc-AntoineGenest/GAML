@@ -73,6 +73,10 @@ import pandas as pd
 from genetic_automl.config import GeneticConfig
 from genetic_automl.genetic.chromosome import Chromosome
 from genetic_automl.genetic.engine import EvolutionHistory, GeneticEngine, GenerationStats
+from genetic_automl.genetic.nsga2 import (
+    build_objective_values, crowding_distance_assignment,
+    fast_non_dominated_sort, pareto_front_summary, _CROWD_ATTR, _RANK_ATTR,
+)
 from genetic_automl.genetic.fitness import FitnessEvaluator
 from genetic_automl.utils.logger import get_logger
 
@@ -350,7 +354,16 @@ class IslandEngine:
 
         # Breed next generation (unless last generation)
         if gen_idx < cfg.generations - 1:
-            population = engine._breed(population, gen_idx + 1, current_mut_rate)
+            # Pass objective_values when NSGA-II is active so each island
+            # uses Pareto-based selection instead of scalar tournament.
+            obj_vals = None
+            if cfg.nsga2_enabled:
+                objectives = cfg.nsga2_objectives or [engine.evaluator.metric, "complexity"]
+                obj_vals = build_objective_values(population, objectives)
+            population = engine._breed(
+                population, gen_idx + 1, current_mut_rate,
+                objective_values=obj_vals,
+            )
 
         state["population"] = population
 
@@ -398,7 +411,27 @@ class IslandEngine:
             if not evaluated:
                 emigrants.append([])
                 continue
-            top_k = sorted(evaluated, key=lambda c: c.fitness, reverse=True)[:k]
+            # NSGA-II: prefer Pareto-optimal (rank-0) emigrants sorted by
+            # crowding distance for diversity. Falls back to scalar fitness
+            # when NSGA-II is disabled.
+            if self.cfg.nsga2_enabled and evaluated:
+                objectives = self.cfg.nsga2_objectives or ["f1_macro", "complexity"]
+                obj_vals_mig = build_objective_values(evaluated, objectives)
+                fronts = fast_non_dominated_sort(evaluated, obj_vals_mig)
+                n_obj = len(next(iter(obj_vals_mig.values()), []))
+                # Stamp ranks and crowding distances
+                for front in fronts:
+                    crowding_distance_assignment(front, obj_vals_mig, n_obj)
+                # Select from rank-0 front by descending crowding distance
+                rank0 = fronts[0] if fronts else evaluated
+                rank0_sorted = sorted(
+                    rank0,
+                    key=lambda c: getattr(c, _CROWD_ATTR, 0.0),
+                    reverse=True,
+                )
+                top_k = rank0_sorted[:k]
+            else:
+                top_k = sorted(evaluated, key=lambda c: c.fitness, reverse=True)[:k]
             emigrants.append([copy.deepcopy(c) for c in top_k])
 
         # Send emigrants to the next island in the ring
@@ -473,5 +506,13 @@ class IslandEngine:
                 mutation_boosted=any(s.mutation_boosted for s in island_gen_stats),
                 best_chromosome=best_chrom,
             ))
+
+        # Compute Pareto front across ALL islands' chromosomes when NSGA-II
+        # is enabled. This gives a richer front than any single island alone.
+        if self.cfg.nsga2_enabled and merged.all_chromosomes:
+            objectives = self.cfg.nsga2_objectives or ["f1_macro", "complexity"]
+            merged.pareto_front = pareto_front_summary(
+                merged.all_chromosomes, objectives
+            )
 
         return merged
