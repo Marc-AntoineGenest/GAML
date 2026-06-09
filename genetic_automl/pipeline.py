@@ -34,6 +34,7 @@ from genetic_automl.genetic.optuna_tuner import OptunaTuner
 from genetic_automl.preprocessing.pipeline import PreprocessingConfig, PreprocessingPipeline
 from genetic_automl.reporting.html_reporter import HTMLReporter
 from genetic_automl.reporting.shap_explainer import SHAPExplainer
+from genetic_automl.reporting.drift_detector import DriftDetector
 from genetic_automl.reporting.mlflow_logger import MLflowLogger
 from genetic_automl.utils.logger import get_logger
 
@@ -119,6 +120,7 @@ class AutoMLPipeline:
         self._history: Optional[EvolutionHistory] = None
         self._report_path: Optional[str] = None
         self._final_score: Optional[float] = None
+        self._drift_detector: Optional[DriftDetector] = None
         metric_override = getattr(config, "_metric_override", None)
         self._metric_name: str = metric_override or get_default_metric(config.problem_type)
 
@@ -239,6 +241,18 @@ class AutoMLPipeline:
         json_path = os.path.join(cfg.report.output_dir, f"run_{cfg.run_id}.json")
         mlflow_logger.save_json(self._history, json_path)
 
+        # --- Drift detector — fit on preprocessed dev set ---------------
+        if cfg.report.drift_enabled:
+            self._drift_detector = DriftDetector(
+                pvalue_threshold=cfg.report.drift_pvalue_threshold,
+                psi_threshold=cfg.report.drift_psi_threshold,
+            ).fit(X_dev_pp)
+            log.info(
+                "DriftDetector fitted on %d rows x %d features.",
+                len(X_dev_pp), X_dev_pp.shape[1],
+            )
+        # -----------------------------------------------------------------
+
         # --- SHAP feature attribution -----------------------------------
         shap_summary = None
         if cfg.report.shap_enabled:
@@ -265,6 +279,48 @@ class AutoMLPipeline:
         )
         log.info("Report: %s", self._report_path)
         return self
+
+    def detect_drift(
+        self,
+        new_df: "pd.DataFrame",
+        target_column: Optional[str] = None,
+    ) -> "DriftReport":
+        """
+        Compare *new_df* against the reference (training) distribution.
+
+        Parameters
+        ----------
+        new_df : pd.DataFrame
+            Incoming data batch to check. May include the target column
+            (it will be dropped automatically).
+        target_column : str | None
+            Name of the target column to drop before comparison.
+            Defaults to the pipeline's own target_column.
+
+        Returns
+        -------
+        DriftReport
+            Per-feature drift statistics plus an overall flag.
+
+        Raises
+        ------
+        RuntimeError
+            If drift_enabled=False in config (DriftDetector was not fitted).
+        """
+        from genetic_automl.reporting.drift_detector import DriftReport
+        if self._drift_detector is None:
+            raise RuntimeError(
+                "DriftDetector is not fitted. Set report.drift_enabled=True "
+                "in your config and re-run pipeline.fit()."
+            )
+        tgt = target_column or self.config.target_column
+        X = new_df.drop(columns=[tgt], errors="ignore")
+        # Apply the same preprocessing so feature spaces match
+        try:
+            X_pp = self._best_preprocessor.transform(X)
+        except Exception:
+            X_pp = X  # best-effort: compare raw features if transform fails
+        return self._drift_detector.detect(X_pp)
 
     def predict(self, df: pd.DataFrame) -> np.ndarray:
         """Preprocess and return predictions."""
@@ -510,6 +566,7 @@ class AutoMLPipeline:
             "config": self.config,
             "metric_name": self._metric_name,
             "final_score": self._final_score,
+            "drift_detector": self._drift_detector,
         }
         _jdump(payload, path)
         log.info("Pipeline saved to %s", os.path.abspath(path))
@@ -537,6 +594,7 @@ class AutoMLPipeline:
         instance._report_path = None
         instance._final_score = payload.get("final_score")
         instance._metric_name = payload["metric_name"]
+        instance._drift_detector = payload.get("drift_detector")
         log.info("Pipeline loaded from %s", os.path.abspath(path))
         return instance
 

@@ -415,6 +415,16 @@ report:
   # Open the HTML report automatically in your browser when the run finishes.
   open_html_on_finish: false
 
+  # Data drift detection
+  # When enabled, the pipeline fits a DriftDetector on training data.
+  # Call pipeline.detect_drift(new_df) or use 'gaml predict --detect-drift'
+  # to compare any new batch against the reference distribution.
+  # Uses KS test (continuous) + chi-squared (categorical) + PSI.
+  # Requires: pip install scipy  (PSI-only fallback without it).
+  drift_enabled: false
+  drift_pvalue_threshold: 0.05   # p-value below which drift is flagged
+  drift_psi_threshold: 0.20      # PSI above which drift is flagged
+
   # SHAP feature attribution summary embedded in the HTML report.
   # Requires: pip install shap  (skipped gracefully if not installed).
   # Only active for backend: sklearn tree models (lgbm, xgb, gbm, rf).

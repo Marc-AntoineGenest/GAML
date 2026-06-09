@@ -192,6 +192,9 @@ def load_config(
         open_html_on_finish=bool(rep_cfg.get("open_html_on_finish", False)),
         shap_enabled=bool(rep_cfg.get("shap_enabled", True)),
         shap_max_samples=int(rep_cfg.get("shap_max_samples", 200)),
+        drift_enabled=bool(rep_cfg.get("drift_enabled", False)),
+        drift_pvalue_threshold=float(rep_cfg.get("drift_pvalue_threshold", 0.05)),
+        drift_psi_threshold=float(rep_cfg.get("drift_psi_threshold", 0.20)),
     )
 
     config = PipelineConfig(

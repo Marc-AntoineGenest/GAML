@@ -481,6 +481,21 @@ class ReportConfig:
     Set to False to skip SHAP and keep report generation fast.
     """
 
+    drift_enabled: bool = False
+    """
+    Enable data drift detection via pipeline.detect_drift(new_df).
+    When True, the pipeline stores a fitted DriftDetector on the training
+    data after fit(), which can then be called to compare any new batch.
+    Uses KS test (continuous) + chi-squared (categorical) + PSI.
+    Requires: pip install scipy  (falls back to PSI-only without it).
+    """
+
+    drift_pvalue_threshold: float = 0.05
+    """KS / chi-squared p-value threshold below which drift is flagged."""
+
+    drift_psi_threshold: float = 0.20
+    """PSI threshold above which drift is flagged (industry standard)."""
+
     shap_max_samples: int = 200
     """
     Maximum number of rows from the dev set passed to shap.TreeExplainer.

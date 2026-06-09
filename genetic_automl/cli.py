@@ -282,6 +282,19 @@ def _cmd_predict(args: argparse.Namespace) -> int:
 
     _info(f"Predictions written to '{out_path}' ({len(preds):,} rows).")
     print(out_path)
+
+    # Optional drift detection
+    if getattr(args, 'detect_drift', None):
+        ref_path = _require_file(args.detect_drift, 'Reference CSV for drift')
+        ref_df = _load_dataframe(ref_path)
+        try:
+            report = pipeline.detect_drift(ref_df)
+            print(report.summary(), file=sys.stderr)
+            if report.any_drift:
+                _info('WARNING: Drift detected — consider retraining.')
+        except RuntimeError as e:
+            _info(f'Drift detection skipped: {e}')
+
     return 0
 
 
@@ -509,6 +522,17 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         default=None,
         help="Output CSV path. Defaults to <data>_predictions.csv.",
+    )
+    pred_p.add_argument(
+        "--detect-drift",
+        metavar="REF_CSV",
+        default=None,
+        dest="detect_drift",
+        help=(
+            "Run drift detection against this reference CSV before predicting. "
+            "Prints a drift report to stderr. Requires drift_enabled=True "
+            "when the pipeline was trained."
+        ),
     )
     pred_p.set_defaults(func=_cmd_predict)
 
