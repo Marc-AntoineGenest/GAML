@@ -445,7 +445,16 @@ class DataConfig:
     """Data split settings."""
 
     backend: str = "pandas"
-    """Data loading backend. Currently only 'pandas' is supported."""
+    """
+    Data loading backend for CSV/Parquet ingestion.
+    Options:
+      "pandas" (default) — battle-tested, works everywhere.
+      "polars"           — 2-10x faster for large files (>100k rows).
+                           Requires: pip install polars pyarrow
+                           Falls back to pandas if polars is not installed.
+    The rest of GAML always uses pandas DataFrames internally; this only
+    affects the initial file-loading step.
+    """
 
     test_size: float = 0.15
     """Fraction of total data locked as the final test set (never seen by the GA)."""

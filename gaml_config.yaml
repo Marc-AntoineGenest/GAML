@@ -57,6 +57,14 @@ run:
 
 data:
 
+  # Data loading backend.
+  # Options:
+  #   pandas (default) — works everywhere.
+  #   polars           — 2-10x faster for large files (>100k rows).
+  #                      Requires: pip install polars pyarrow
+  #                      Falls back to pandas if not installed.
+  backend: pandas
+
   # Fraction of total data locked as the final test set.
   # The GA never touches this — it is used only for the last evaluation.
   test_size: 0.15

@@ -102,6 +102,7 @@ def load_config(
 
     data_cfg = raw.get("data", {})
     data = DataConfig(
+        backend=str(data_cfg.get("backend", "pandas")),
         test_size=float(data_cfg.get("test_size", 0.15)),
         val_size=float(data_cfg.get("val_size", 0.20)),
         stratify=bool(data_cfg.get("stratify", True)),

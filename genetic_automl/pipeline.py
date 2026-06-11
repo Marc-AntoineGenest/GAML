@@ -35,6 +35,7 @@ from genetic_automl.preprocessing.pipeline import PreprocessingConfig, Preproces
 from genetic_automl.reporting.html_reporter import HTMLReporter
 from genetic_automl.reporting.shap_explainer import SHAPExplainer
 from genetic_automl.reporting.drift_detector import DriftDetector
+from genetic_automl.automl.incremental_model import IncrementalModel
 from genetic_automl.reporting.mlflow_logger import MLflowLogger
 from genetic_automl.utils.logger import get_logger
 
@@ -321,6 +322,58 @@ class AutoMLPipeline:
         except Exception:
             X_pp = X  # best-effort: compare raw features if transform fails
         return self._drift_detector.detect(X_pp)
+
+    def partial_fit(
+        self,
+        new_df: "pd.DataFrame",
+        epochs: int = 1,
+        target_column: Optional[str] = None,
+    ) -> "AutoMLPipeline":
+        """
+        Update the fitted model on a new batch of labelled data.
+
+        Uses the same preprocessing pipeline fitted during training.
+        The model must support incremental learning (IncrementalModel)
+        or expose a partial_fit() method.
+
+        Parameters
+        ----------
+        new_df : pd.DataFrame
+            New batch including the target column.
+        epochs : int
+            Passes over the batch (default 1).
+        target_column : str | None
+            Defaults to the pipeline's own target_column.
+
+        Returns
+        -------
+        self — for chaining.
+        """
+        self._check_fitted()
+        tgt = target_column or self.config.target_column
+        if tgt not in new_df.columns:
+            raise ValueError(
+                f"Target column '{tgt}' not found in new_df. "
+                f"Available: {list(new_df.columns)}"
+            )
+        X_new = new_df.drop(columns=[tgt])
+        y_new = new_df[tgt]
+        X_new_pp = self._best_preprocessor.transform(X_new)
+
+        model = self._best_model
+        if hasattr(model, "partial_fit"):
+            model.partial_fit(X_new_pp, y_new, epochs=epochs)
+            log.info(
+                "partial_fit complete | rows=%d | epochs=%d",
+                len(X_new_pp), epochs,
+            )
+        else:
+            raise RuntimeError(
+                "The fitted model does not support partial_fit(). "
+                "Train with an IncrementalModel by setting "
+                "automl.backend='sklearn' and model_type='sgd' (or similar)."
+            )
+        return self
 
     def predict(self, df: pd.DataFrame) -> np.ndarray:
         """Preprocess and return predictions."""

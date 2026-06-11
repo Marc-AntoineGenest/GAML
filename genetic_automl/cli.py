@@ -71,13 +71,14 @@ def _require_file(path: str, label: str) -> Path:
     return p
 
 
-def _load_dataframe(csv_path: Path):
-    """Read a CSV into a pandas DataFrame with helpful error messages."""
+def _load_dataframe(csv_path: Path, backend: str = "pandas"):
+    """Read a CSV/Parquet into a pandas DataFrame with helpful error messages."""
     try:
-        import pandas as pd
-        return pd.read_csv(csv_path)
+        from genetic_automl.core.data import DataManager
+        dm = DataManager(target_column="", problem_type=None)
+        return dm.load(str(csv_path), backend=backend)
     except Exception as exc:
-        _err(f"Could not read CSV '{csv_path}': {exc}", code=2)
+        _err(f"Could not read '{csv_path}': {exc}", code=2)
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +91,8 @@ def _cmd_fit(args: argparse.Namespace) -> int:
 
     csv_path = _require_file(args.data, "Data file")
     _info(f"Loading data from '{csv_path}' ...")
-    df = _load_dataframe(csv_path)
+    data_backend = getattr(args, "data_backend", "pandas") or "pandas"
+    df = _load_dataframe(csv_path, backend=data_backend)
     _info(f"  Rows: {len(df):,}  |  Columns: {len(df.columns)}")
 
     # -----------------------------------------------------------------------
@@ -180,6 +182,9 @@ def _cmd_fit(args: argparse.Namespace) -> int:
     if args.no_shap:
         config.report.shap_enabled = False
 
+    if getattr(args, 'data_backend', None):
+        config.data.backend = args.data_backend
+
     if args.calibrate:
         config.automl.calibration.enabled = True
 
@@ -243,7 +248,8 @@ def _cmd_predict(args: argparse.Namespace) -> int:
         _err(f"Could not load pipeline: {exc}", code=2)
 
     _info(f"Loading data from '{csv_path}' ...")
-    df = _load_dataframe(csv_path)
+    data_backend = getattr(args, "data_backend", "pandas") or "pandas"
+    df = _load_dataframe(csv_path, backend=data_backend)
 
     # Drop target column if it accidentally ended up in the predict CSV
     # Always read from config; pipeline._target_column is not a public attribute.
@@ -295,6 +301,40 @@ def _cmd_predict(args: argparse.Namespace) -> int:
         except RuntimeError as e:
             _info(f'Drift detection skipped: {e}')
 
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# update (partial_fit on new data)
+# ---------------------------------------------------------------------------
+
+def _cmd_update(args: argparse.Namespace) -> int:
+    """
+    Incrementally update a saved pipeline on a new CSV batch.
+    The model must support partial_fit (IncrementalModel).
+    """
+    model_path = _require_file(args.model, "Model file")
+    csv_path   = _require_file(args.data,  "Data file")
+
+    _info(f"Loading pipeline from '{model_path}' ...")
+    try:
+        pipeline = AutoMLPipeline.load(str(model_path))
+    except Exception as exc:
+        _err(f"Could not load pipeline: {exc}", code=2)
+
+    _info(f"Loading new data from '{csv_path}' ...")
+    df = _load_dataframe(csv_path)
+    _info(f"  Rows: {len(df):,}  |  Columns: {len(df.columns)}")
+
+    try:
+        pipeline.partial_fit(df, epochs=args.epochs)
+    except Exception as exc:
+        _err(f"partial_fit failed: {exc}", code=2)
+
+    save_path = args.save or str(model_path)  # overwrite by default
+    saved = pipeline.save(save_path)
+    _info(f"Updated pipeline saved to '{saved}'.")
+    print(saved)
     return 0
 
 
@@ -434,6 +474,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Human-readable run name shown in the HTML report.",
     )
     fit_p.add_argument(
+        "--data-backend",
+        metavar="BACKEND",
+        default=None,
+        dest="data_backend",
+        choices=["pandas", "polars"],
+        help=(
+            "Data loading backend: pandas (default) or polars. "
+            "Polars is 2-10x faster for large files. "
+            "Requires: pip install polars pyarrow"
+        ),
+    )
+    fit_p.add_argument(
         "--no-shap",
         action="store_true",
         dest="no_shap",
@@ -539,6 +591,24 @@ def _build_parser() -> argparse.ArgumentParser:
     # -----------------------------------------------------------------------
     # version
     # -----------------------------------------------------------------------
+    upd_p = sub.add_parser(
+        "update",
+        help="Incrementally update a saved pipeline on new data.",
+        description=(
+            "Load a saved pipeline and call partial_fit() on a new CSV batch. "
+            "Requires the model to support incremental learning (SGD, etc.)."
+        ),
+    )
+    upd_p.add_argument("model", metavar="MODEL_JOBLIB",
+                       help="Saved pipeline produced by 'gaml fit --save'.")
+    upd_p.add_argument("data", metavar="DATA_CSV",
+                       help="New labelled CSV batch (must include target column).")
+    upd_p.add_argument("--epochs", type=int, default=1,
+                       help="Passes over the new batch (default 1).")
+    upd_p.add_argument("--save", metavar="PATH", default=None,
+                       help="Output path (default: overwrite the input model).")
+    upd_p.set_defaults(func=_cmd_update)
+
     ver_p = sub.add_parser("version", help="Print the GAML version and exit.")
     ver_p.set_defaults(func=_cmd_version)
 

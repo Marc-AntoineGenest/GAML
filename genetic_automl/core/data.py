@@ -27,6 +27,12 @@ from typing import Optional, Tuple
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
+try:
+    import polars as pl
+    _POLARS_AVAILABLE = True
+except ImportError:
+    _POLARS_AVAILABLE = False
+
 from genetic_automl.core.problem import ProblemType
 from genetic_automl.utils.logger import get_logger
 
@@ -75,8 +81,27 @@ class DataManager:
     # Public interface
     # ------------------------------------------------------------------
 
-    def load(self, path: str) -> pd.DataFrame:
-        """Load CSV / Parquet / Excel from *path* into a DataFrame."""
+    def load(
+        self, path: str, backend: str = "pandas"
+    ) -> pd.DataFrame:
+        """
+        Load CSV / Parquet / Excel from *path* into a pandas DataFrame.
+
+        Parameters
+        ----------
+        path : str
+        backend : str
+            "pandas" (default) or "polars".
+            Polars is 2-10x faster for large CSV/Parquet files.
+            Regardless of backend, the result is always a pandas DataFrame
+            so the rest of the GAML stack is unaffected.
+        """
+        if backend == "polars":
+            return self._load_polars(path)
+        return self._load_pandas(path)
+
+    def _load_pandas(self, path: str) -> pd.DataFrame:
+        """Load with pandas (default)."""
         path_lower = path.lower()
         if path_lower.endswith(".csv"):
             df = pd.read_csv(path)
@@ -86,8 +111,48 @@ class DataManager:
             df = pd.read_excel(path)
         else:
             raise ValueError(f"Unsupported file format: {path}")
-        log.info("Loaded %d rows × %d cols from '%s'", len(df), df.shape[1], path)
+        log.info("Loaded %d rows x %d cols from '%s' (pandas)", len(df), df.shape[1], path)
         return df
+
+    def _load_polars(self, path: str) -> pd.DataFrame:
+        """
+        Load with Polars, then convert to pandas.
+
+        Polars is 2-10x faster than pandas for CSV/Parquet loading because
+        it uses a multi-threaded Rust parser. The conversion to pandas adds
+        ~10-20% overhead but is negligible compared to the loading speedup.
+        Requires: pip install polars pyarrow
+        """
+        if not _POLARS_AVAILABLE:
+            log.warning(
+                "Polars is not installed — falling back to pandas. "
+                "Install with: pip install polars pyarrow"
+            )
+            return self._load_pandas(path)
+
+        path_lower = path.lower()
+        try:
+            if path_lower.endswith(".csv"):
+                lf = pl.read_csv(path)
+            elif path_lower.endswith((".parquet", ".pq")):
+                lf = pl.read_parquet(path)
+            else:
+                log.warning(
+                    "Polars backend does not support '%s' — falling back to pandas.", path
+                )
+                return self._load_pandas(path)
+
+            df = lf.to_pandas()
+            log.info(
+                "Loaded %d rows x %d cols from '%s' (polars)",
+                len(df), df.shape[1], path,
+            )
+            return df
+        except Exception as exc:
+            log.warning(
+                "Polars load failed (%s) — falling back to pandas.", exc
+            )
+            return self._load_pandas(path)
 
     def validate(self, df: pd.DataFrame) -> pd.DataFrame:
         """Basic sanity checks — returns the (possibly coerced) DataFrame."""
