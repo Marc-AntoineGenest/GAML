@@ -58,7 +58,6 @@ class DistributionTransform:
         self._shifts: Dict[str, float] = {}         # for box-cox: shift to make positive
         self._skewed_cols: List[str] = []           # cols that exceeded threshold
 
-    # ------------------------------------------------------------------
 
     def fit(self, X: pd.DataFrame, y=None) -> "DistributionTransform":
         if self.method == "none":

@@ -24,9 +24,7 @@ from genetic_automl import (
 from genetic_automl.core.problem import ProblemType
 
 
-# =============================================================================
 # A) YAML-driven (recommended)
-# =============================================================================
 
 def run_yaml_driven():
     """Load all settings from gaml_config.yaml and run."""
@@ -48,7 +46,6 @@ def run_yaml_driven():
     print(f"\n  Final {pipeline._metric_name}: {pipeline.final_score:.4f}")
     print(f"  Report : {pipeline.report_path}")
 
-    # --- Save / Load demo ---
     # Persist the fitted pipeline so inference can run without re-fitting.
     save_path = pipeline.save("saved_models/breast_cancer.joblib")
     print(f"  Saved  : {save_path}")
@@ -62,9 +59,7 @@ def run_yaml_driven():
     return pipeline
 
 
-# =============================================================================
 # B) Code-only (programmatic config)
-# =============================================================================
 
 def run_code_only():
     """Construct PipelineConfig entirely in Python -- no YAML file needed."""
@@ -98,9 +93,7 @@ def run_code_only():
     return pipeline
 
 
-# =============================================================================
 # Entry point
-# =============================================================================
 
 if __name__ == "__main__":
     yaml_pipeline = run_yaml_driven()

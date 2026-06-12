@@ -64,9 +64,6 @@ class SHAPExplainer:
     def __init__(self, max_samples: int = 200) -> None:
         self.max_samples = max_samples
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def explain(
         self,
@@ -153,9 +150,6 @@ class SHAPExplainer:
         )
         return result
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _resolve_estimator(model: Any) -> Any:
@@ -189,7 +183,6 @@ class SHAPExplainer:
 
         ev = explainer.expected_value
 
-        # --- Normalise SHAP values to a 2-D (N, F) array -----------------
         # Case 1: list of arrays — lgbm binary classification → [neg_class, pos_class]
         if isinstance(sv, list):
             arr = np.array(sv[1] if len(sv) == 2 else sv[0])
@@ -220,9 +213,6 @@ class SHAPExplainer:
         return fi, 0.0
 
 
-# ---------------------------------------------------------------------------
-# SVG bar chart builder — no JS, no external dependencies
-# ---------------------------------------------------------------------------
 
 def _build_shap_svg(
     feature_names: List[str],

@@ -60,11 +60,9 @@ from genetic_automl.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
 # Per-model Optuna search spaces
 # Each entry is (param_name, suggest_type, kwargs).
 # suggest_type: "float" | "int" | "categorical" | "log_float"
-# ---------------------------------------------------------------------------
 
 _SEARCH_SPACES: Dict[str, list] = {
     "lgbm": [
@@ -156,9 +154,6 @@ class OptunaTuner:
         self.n_cv_folds = n_cv_folds
         self.verbose = verbose
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def tune(
         self,
@@ -272,9 +267,6 @@ class OptunaTuner:
         )
         return tuned_genes
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     def _evaluate(
         self,
@@ -326,6 +318,7 @@ class OptunaTuner:
     ) -> float:
         """Single 80/20 stratified split evaluation."""
         from sklearn.model_selection import train_test_split
+
         from genetic_automl.automl import build_automl
 
         stratify = y if problem_type != ProblemType.REGRESSION else None
@@ -363,7 +356,8 @@ class OptunaTuner:
         random_seed: int,
     ) -> float:
         """Full k-fold CV evaluation (accurate but slower)."""
-        from sklearn.model_selection import StratifiedKFold, KFold
+        from sklearn.model_selection import KFold, StratifiedKFold
+
         from genetic_automl.automl import build_automl
 
         if problem_type == ProblemType.REGRESSION:

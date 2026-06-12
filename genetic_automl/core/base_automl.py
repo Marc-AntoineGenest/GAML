@@ -49,9 +49,6 @@ class BaseAutoML(ABC):
         self._fit_duration: float = 0.0
         self._feature_names: Optional[List[str]] = None
 
-    # ------------------------------------------------------------------
-    # Core interface (must override)
-    # ------------------------------------------------------------------
 
     @abstractmethod
     def fit(
@@ -73,9 +70,6 @@ class BaseAutoML(ABC):
         """Return class probabilities. Returns None by default."""
         return None
 
-    # ------------------------------------------------------------------
-    # Scoring
-    # ------------------------------------------------------------------
 
     def score(
         self,
@@ -112,9 +106,6 @@ class BaseAutoML(ABC):
         log.debug("score | metric=%s | value=%.6f", metric, value)
         return value
 
-    # ------------------------------------------------------------------
-    # Meta
-    # ------------------------------------------------------------------
 
     @property
     def is_fitted(self) -> bool:

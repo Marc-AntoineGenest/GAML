@@ -28,7 +28,11 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from genetic_automl.genetic.chromosome import Chromosome, get_gene_space, random_population
+from genetic_automl.genetic.chromosome import (
+    Chromosome,
+    get_gene_space,
+    random_population,
+)
 from genetic_automl.utils.logger import get_logger
 
 log = get_logger(__name__)

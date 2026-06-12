@@ -23,7 +23,6 @@ from genetic_automl.genetic.operators import (
 )
 from genetic_automl.genetic.warm_start import WarmStart, _sklearn_baseline
 
-
 # ---------------------------------------------------------------------------
 # Chromosome
 # ---------------------------------------------------------------------------
@@ -191,15 +190,14 @@ class TestWarmStart:
         assert all(c.fitness is None for c in pop)
 
 
-# ---------------------------------------------------------------------------
-# Phase 1 improvements
-# ---------------------------------------------------------------------------
-
 class TestVectorisedHamming:
     """PERF-3: vectorised Hamming distance produces same results as scalar version."""
 
     def test_mean_pairwise_matches_scalar(self):
-        from genetic_automl.genetic.diversity import mean_pairwise_hamming, hamming_distance
+        from genetic_automl.genetic.diversity import (
+            hamming_distance,
+            mean_pairwise_hamming,
+        )
         rng = random.Random(7)
         pop = random_population("sklearn", 10, rng)
         # Scalar reference
@@ -230,8 +228,8 @@ class TestFitnessCache:
     """PERF-2: identical chromosomes are served from cache."""
 
     def test_cache_hit_on_duplicate(self):
-        from genetic_automl.genetic.fitness import FitnessEvaluator
         from genetic_automl.core.problem import ProblemType
+        from genetic_automl.genetic.fitness import FitnessEvaluator
         evaluator = FitnessEvaluator(
             problem_type=ProblemType.CLASSIFICATION,
             target_column="y",
@@ -255,8 +253,8 @@ class TestFitnessCache:
         assert f1 == f2
 
     def test_different_genes_not_cached(self):
-        from genetic_automl.genetic.fitness import FitnessEvaluator
         from genetic_automl.core.problem import ProblemType
+        from genetic_automl.genetic.fitness import FitnessEvaluator
         evaluator = FitnessEvaluator(
             problem_type=ProblemType.CLASSIFICATION,
             target_column="y",
@@ -280,9 +278,10 @@ class TestFitnessStdPenalty:
     """QUAL-1: std penalty correctly reduces fitness of high-variance chromosomes."""
 
     def test_penalty_lowers_fitness(self):
-        from genetic_automl.genetic.fitness import FitnessEvaluator
-        from genetic_automl.core.problem import ProblemType
         import numpy as np
+
+        from genetic_automl.core.problem import ProblemType
+        from genetic_automl.genetic.fitness import FitnessEvaluator
 
         ev_no_pen = FitnessEvaluator(
             problem_type=ProblemType.CLASSIFICATION,
@@ -342,8 +341,8 @@ class TestGeneSpaceDictCache:
     """PERF-4: mutate() accepts pre-built dict and produces valid chromosomes."""
 
     def test_mutate_with_dict_cache(self):
-        from genetic_automl.genetic.operators import mutate
         from genetic_automl.genetic.chromosome import get_gene_space
+        from genetic_automl.genetic.operators import mutate
         rng = random.Random(9)
         pop = random_population("sklearn", 1, rng)
         chrom = pop[0]

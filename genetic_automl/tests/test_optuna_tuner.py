@@ -27,8 +27,7 @@ import pytest
 from genetic_automl.config import AutoMLConfig, OptunaConfig, PipelineConfig
 from genetic_automl.core.problem import ProblemType
 from genetic_automl.genetic.chromosome import Chromosome
-from genetic_automl.genetic.optuna_tuner import OptunaTuner, _SEARCH_SPACES
-
+from genetic_automl.genetic.optuna_tuner import _SEARCH_SPACES, OptunaTuner
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -334,8 +333,8 @@ class TestPipelineIntegration:
     """
 
     def _make_mock_pipeline(self, optuna_enabled: bool, backend: str = "sklearn"):
-        from genetic_automl.pipeline import AutoMLPipeline
         from genetic_automl.genetic.engine import EvolutionHistory
+        from genetic_automl.pipeline import AutoMLPipeline
 
         cfg = PipelineConfig(
             problem_type=ProblemType.CLASSIFICATION,

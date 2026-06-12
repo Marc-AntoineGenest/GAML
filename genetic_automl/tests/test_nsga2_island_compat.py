@@ -25,7 +25,6 @@ from genetic_automl.genetic.chromosome import Chromosome
 from genetic_automl.genetic.fitness import FitnessEvaluator
 from genetic_automl.genetic.nsga2 import _CROWD_ATTR, _RANK_ATTR
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

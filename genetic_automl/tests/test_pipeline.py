@@ -14,7 +14,6 @@ from genetic_automl.config import (
 from genetic_automl.core.data import DataManager
 from genetic_automl.core.problem import ProblemType
 
-
 # ---------------------------------------------------------------------------
 # DataManager
 # ---------------------------------------------------------------------------

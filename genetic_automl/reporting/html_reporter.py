@@ -29,7 +29,6 @@ class HTMLReporter:
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
 
-    # ------------------------------------------------------------------
 
     def generate(
         self,
@@ -71,7 +70,6 @@ class HTMLReporter:
 
         return filepath
 
-    # ------------------------------------------------------------------
 
     def _render(
         self,
@@ -174,7 +172,6 @@ class HTMLReporter:
     Dropped by correlation filter: <code>{pp_dropped_str}</code>
   </p>"""
 
-        # --- SHAP section ------------------------------------------------
         shap_section = ""
         if shap_summary:
             n_shap   = shap_summary.get("n_samples_used", 0)
@@ -217,9 +214,7 @@ class HTMLReporter:
     Mean |SHAP| = average absolute SHAP value across {n_shap} sampled rows.
     Higher values indicate greater average impact on model output.
   </p>"""
-        # -----------------------------------------------------------------
 
-        # --- Pareto front section ------------------------------------
         pareto_section = ""
         if pareto_front:
             obj_names = list(pareto_front[0].get("objectives", {}).keys()) if pareto_front else []
@@ -249,7 +244,6 @@ class HTMLReporter:
                 "Rank-0 Pareto front: no solution is strictly better on all objectives. "
                 "Sorted by crowding distance (more isolated = more diverse trade-off).</p>"
             )
-        # -------------------------------------------------------------
 
         return f"""<!DOCTYPE html>
 <html lang="en">

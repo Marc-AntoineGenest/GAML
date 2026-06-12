@@ -19,24 +19,28 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-from joblib import dump as _jdump, load as _jload
+from joblib import dump as _jdump
+from joblib import load as _jload
 
 from genetic_automl.automl import build_automl
 from genetic_automl.automl.ensemble_model import EnsembleModel
+from genetic_automl.automl.incremental_model import IncrementalModel
 from genetic_automl.config import PipelineConfig
 from genetic_automl.core.base_automl import BaseAutoML
 from genetic_automl.core.data import DataManager
-from genetic_automl.core.problem import get_default_metric, ProblemType
+from genetic_automl.core.problem import ProblemType, get_default_metric
 from genetic_automl.genetic.engine import EvolutionHistory, GeneticEngine
-from genetic_automl.genetic.island_engine import IslandEngine
 from genetic_automl.genetic.fitness import FitnessEvaluator, _split_genes
+from genetic_automl.genetic.island_engine import IslandEngine
 from genetic_automl.genetic.optuna_tuner import OptunaTuner
-from genetic_automl.preprocessing.pipeline import PreprocessingConfig, PreprocessingPipeline
-from genetic_automl.reporting.html_reporter import HTMLReporter
-from genetic_automl.reporting.shap_explainer import SHAPExplainer
+from genetic_automl.preprocessing.pipeline import (
+    PreprocessingConfig,
+    PreprocessingPipeline,
+)
 from genetic_automl.reporting.drift_detector import DriftDetector
-from genetic_automl.automl.incremental_model import IncrementalModel
+from genetic_automl.reporting.html_reporter import HTMLReporter
 from genetic_automl.reporting.mlflow_logger import MLflowLogger
+from genetic_automl.reporting.shap_explainer import SHAPExplainer
 from genetic_automl.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -55,7 +59,6 @@ def _apply_calibration(model, X: "pd.DataFrame", y: "pd.Series",
     """
     from sklearn.calibration import CalibratedClassifierCV
 
-    # Resolve the underlying raw estimator
     raw = None
     if hasattr(model, "_estimator"):
         raw = model._estimator
@@ -211,8 +214,6 @@ class AutoMLPipeline:
         X_dev = pd.concat([X_train, X_val], ignore_index=True)
         y_dev = pd.concat([y_train, y_val], ignore_index=True)
 
-        # Use best chromosome's preprocessing config (shared across all ensemble members).
-        # All members share the same fitted preprocessor — they receive identical features.
         pp_genes, _ = _split_genes(best_chrom.genes)
         pp_config = PreprocessingConfig.from_genes(pp_genes)
         self._best_preprocessor = PreprocessingPipeline(
@@ -242,7 +243,6 @@ class AutoMLPipeline:
         json_path = os.path.join(cfg.report.output_dir, f"run_{cfg.run_id}.json")
         mlflow_logger.save_json(self._history, json_path)
 
-        # --- Drift detector — fit on preprocessed dev set ---------------
         if cfg.report.drift_enabled:
             self._drift_detector = DriftDetector(
                 pvalue_threshold=cfg.report.drift_pvalue_threshold,
@@ -252,9 +252,7 @@ class AutoMLPipeline:
                 "DriftDetector fitted on %d rows x %d features.",
                 len(X_dev_pp), X_dev_pp.shape[1],
             )
-        # -----------------------------------------------------------------
 
-        # --- SHAP feature attribution -----------------------------------
         shap_summary = None
         if cfg.report.shap_enabled:
             shap_summary = SHAPExplainer(
@@ -264,7 +262,6 @@ class AutoMLPipeline:
                 X=X_dev_pp,
                 feature_names=list(X_dev_pp.columns) if hasattr(X_dev_pp, "columns") else None,
             )
-        # -----------------------------------------------------------------
 
         reporter = HTMLReporter(output_dir=cfg.report.output_dir)
         self._report_path = reporter.generate(
@@ -316,7 +313,6 @@ class AutoMLPipeline:
             )
         tgt = target_column or self.config.target_column
         X = new_df.drop(columns=[tgt], errors="ignore")
-        # Apply the same preprocessing so feature spaces match
         try:
             X_pp = self._best_preprocessor.transform(X)
         except Exception:
@@ -453,9 +449,6 @@ class AutoMLPipeline:
             "report_path": self._report_path,
         }
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     def _build_final_model(
         self,
@@ -469,8 +462,7 @@ class AutoMLPipeline:
 
         When ensemble is enabled (cfg.automl.ensemble.enabled), refit the
         top-k unique chromosomes and combine them into an EnsembleModel.
-        Otherwise, fall back to fitting only the single best chromosome
-        (original behaviour).
+        Otherwise, fall back to fitting only the single best chromosome.
 
         When Optuna HPO is enabled (cfg.automl.optuna.enabled), the best
         chromosome's model hyperparameters are fine-tuned with Bayesian
@@ -484,7 +476,6 @@ class AutoMLPipeline:
         opt_cfg = cfg.automl.optuna
         top_k = ens_cfg.top_k if ens_cfg.enabled else 1
 
-        # Collect unique top-k chromosomes from history (best first).
         candidates = self._history.top_chromosomes(top_k) if self._history else [best_chrom]
         if not candidates:
             candidates = [best_chrom]
@@ -494,7 +485,6 @@ class AutoMLPipeline:
             ens_cfg.enabled, top_k, len(candidates), opt_cfg.enabled,
         )
 
-        # --- Optuna HPO on the best chromosome (rank 0 only) ---------------
         # We only tune the structural winner. Tuning every ensemble member
         # would multiply cost without meaningful gain -- the ensemble itself
         # already provides variance reduction.
@@ -523,7 +513,6 @@ class AutoMLPipeline:
                 "OptunaTuner is only supported for backend='sklearn'. "
                 "backend=%r -- skipping HPO.", cfg.automl.backend,
             )
-        # --------------------------------------------------------------------
 
         fitted_members = []
         fitness_weights = []
@@ -571,7 +560,6 @@ class AutoMLPipeline:
             )
             log.info("EnsembleModel ready: %s", final_model)
 
-        # --- Probability calibration (classification only) -------------------
         cal_cfg = cfg.automl.calibration
         if (
             cal_cfg.enabled
@@ -588,7 +576,6 @@ class AutoMLPipeline:
                 "Calibration is only supported for backend='sklearn'. "
                 "backend=%r — skipping calibration.", cfg.automl.backend,
             )
-        # ---------------------------------------------------------------------
 
         return final_model
 

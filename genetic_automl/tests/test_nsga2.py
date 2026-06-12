@@ -1,5 +1,5 @@
 """
-Tests for NSGA-II multi-objective GA (Sprint 2 Item 5).
+Tests for the NSGA-II multi-objective GA.
 
 Coverage:
   1.  dominates() — all cases
@@ -34,6 +34,9 @@ from genetic_automl.config import GeneticConfig, PipelineConfig
 from genetic_automl.core.problem import ProblemType
 from genetic_automl.genetic.chromosome import Chromosome
 from genetic_automl.genetic.nsga2 import (
+    _CROWD_ATTR,
+    _INF_CROWD,
+    _RANK_ATTR,
     build_objective_values,
     crowding_distance_assignment,
     dominates,
@@ -41,9 +44,7 @@ from genetic_automl.genetic.nsga2 import (
     nsga2_select,
     nsga2_survive,
     pareto_front_summary,
-    _RANK_ATTR, _CROWD_ATTR, _INF_CROWD,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

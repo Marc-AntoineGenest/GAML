@@ -72,12 +72,20 @@ import pandas as pd
 
 from genetic_automl.config import GeneticConfig
 from genetic_automl.genetic.chromosome import Chromosome
-from genetic_automl.genetic.engine import EvolutionHistory, GeneticEngine, GenerationStats
-from genetic_automl.genetic.nsga2 import (
-    build_objective_values, crowding_distance_assignment,
-    fast_non_dominated_sort, pareto_front_summary, _CROWD_ATTR, _RANK_ATTR,
+from genetic_automl.genetic.engine import (
+    EvolutionHistory,
+    GenerationStats,
+    GeneticEngine,
 )
 from genetic_automl.genetic.fitness import FitnessEvaluator
+from genetic_automl.genetic.nsga2 import (
+    _CROWD_ATTR,
+    _RANK_ATTR,
+    build_objective_values,
+    crowding_distance_assignment,
+    fast_non_dominated_sort,
+    pareto_front_summary,
+)
 from genetic_automl.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -129,8 +137,7 @@ class IslandEngine:
         self.n_island_jobs = n_island_jobs
         self.history = EvolutionHistory()
 
-        # Each island gets a GeneticConfig with a smaller population size.
-        # We floor-divide so total chromosomes ≈ original population_size.
+        # Floor-divide so total chromosomes ≈ original population_size.
         island_pop_size = max(4, genetic_config.population_size // n_islands)
 
         log.info(
@@ -140,10 +147,6 @@ class IslandEngine:
             migration_interval, migration_size, n_island_jobs,
         )
 
-        # Build one GeneticEngine per island.
-        # Each gets:
-        #   - its own deep-copied config with a unique random_seed offset
-        #   - its own deep-copied evaluator (independent cache + ASHA pool)
         self._islands: List[GeneticEngine] = []
         for i in range(n_islands):
             island_cfg = copy.deepcopy(genetic_config)
@@ -163,9 +166,6 @@ class IslandEngine:
             )
             self._islands.append(engine)
 
-    # ------------------------------------------------------------------
-    # Public API (mirrors GeneticEngine.run())
-    # ------------------------------------------------------------------
 
     def run(
         self,
@@ -185,11 +185,9 @@ class IslandEngine:
         """
         n_gens = self.cfg.generations
 
-        # Build initial populations for each island
         log.info("IslandEngine: building initial populations ...")
         populations = self._build_initial_populations(X_train, y_train)
 
-        # Island-local state mirrors GeneticEngine.run()
         island_states = [
             {
                 "population": pop,
@@ -209,14 +207,12 @@ class IslandEngine:
                 gen_idx + 1, n_gens, migrations_done,
             )
 
-            # --- Evolve one generation on each island --------------------
             if self.n_island_jobs == 1 or self.n_islands == 1:
                 for i, (engine, state) in enumerate(zip(self._islands, island_states)):
                     self._step_island(engine, state, X_train, y_train, gen_idx)
             else:
                 self._step_islands_parallel(island_states, X_train, y_train, gen_idx)
 
-            # --- Migration -----------------------------------------------
             if (gen_idx + 1) % self.migration_interval == 0 and gen_idx < n_gens - 1:
                 self._migrate(island_states)
                 migrations_done += 1
@@ -249,7 +245,6 @@ class IslandEngine:
                 )
                 break
 
-        # --- Merge histories and return global best ----------------------
         self.history = self._merge_histories()
         best = self.history.best
 
@@ -271,9 +266,6 @@ class IslandEngine:
             "island_summaries":   summaries,
         }
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     def _build_initial_populations(
         self,
@@ -305,14 +297,12 @@ class IslandEngine:
         cfg = engine.cfg
         population = state["population"]
 
-        # Evaluate unevaluated chromosomes
         unevaluated = [c for c in population if c.fitness is None]
         if unevaluated:
             engine._evaluate_population(unevaluated, X_train, y_train)
             for chrom in unevaluated:
                 engine.history.all_chromosomes.append(chrom)
 
-        # Update surrogate on this island's history
         if engine.evaluator.surrogate is not None:
             engine.evaluator.surrogate.update(engine.history.all_chromosomes)
 
@@ -332,7 +322,6 @@ class IslandEngine:
         else:
             state["no_improvement_streak"] += 1
 
-        # Diversity + adaptive mutation
         population, current_mut_rate = engine._diversity.update(
             population, gen_idx, state["no_improvement_streak"],
         )
@@ -352,7 +341,6 @@ class IslandEngine:
             best_chromosome=best_chrom,
         ))
 
-        # Breed next generation (unless last generation)
         if gen_idx < cfg.generations - 1:
             # Pass objective_values when NSGA-II is active so each island
             # uses Pareto-based selection instead of scalar tournament.
@@ -403,7 +391,6 @@ class IslandEngine:
         n = self.n_islands
         k = self.migration_size
 
-        # Collect emigrants from each island before modifying any population
         emigrants: List[List[Chromosome]] = []
         for state in island_states:
             pop = state["population"]
@@ -466,11 +453,9 @@ class IslandEngine:
         """
         merged = EvolutionHistory()
 
-        # Collect all chromosomes from all islands
         for engine in self._islands:
             merged.all_chromosomes.extend(engine.history.all_chromosomes)
 
-        # Align GenerationStats by generation index
         max_gens = max(
             (len(e.history.generations) for e in self._islands),
             default=0,

@@ -38,7 +38,6 @@ class CorrelationFilter:
         self._cols_to_drop: List[str] = []
         self._feature_names_in: List[str] = []
 
-    # ------------------------------------------------------------------
 
     def fit(self, X: pd.DataFrame, y: pd.Series = None) -> "CorrelationFilter":
         self._feature_names_in = list(X.columns)

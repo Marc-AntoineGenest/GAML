@@ -100,9 +100,6 @@ class SurrogateModel:
 
         self._build_gene_encoder()
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def should_skip(
         self,
@@ -190,9 +187,6 @@ class SurrogateModel:
             "skip_rate": round(self.skip_rate, 3),
         }
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     def _build_surrogate_model(self):
         """

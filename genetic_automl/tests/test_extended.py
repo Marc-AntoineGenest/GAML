@@ -119,8 +119,9 @@ class TestRocAucMetric:
 
     def test_roc_auc_multiclass_proba_matrix_works(self):
         """2-D proba matrix (N, C) must still use multi_class='ovr'."""
-        from genetic_automl.core.problem import _METRIC_REGISTRY
         import numpy as np
+
+        from genetic_automl.core.problem import _METRIC_REGISTRY
         rng = np.random.default_rng(0)
         y_true = np.array([0, 1, 2, 0, 1, 2])
         # Proper (N, 3) probability matrix
@@ -335,11 +336,12 @@ class TestDiversityOrderingBug:
         to 0 before the diversity controller sees it, so no spurious boost fires.
         This test verifies the full engine respects the corrected ordering.
         """
+        from sklearn.datasets import load_breast_cancer
+
         from genetic_automl.config import GeneticConfig
+        from genetic_automl.core.problem import ProblemType
         from genetic_automl.genetic.engine import GeneticEngine
         from genetic_automl.genetic.fitness import FitnessEvaluator
-        from genetic_automl.core.problem import ProblemType
-        from sklearn.datasets import load_breast_cancer
 
         data = load_breast_cancer(as_frame=True)
         X = data.data
@@ -621,7 +623,9 @@ class TestCorrelationFilterEdgeCases:
 class TestDistributionTransformEdgeCases:
     def test_box_cox_on_negative_values_no_crash(self):
         """box-cox auto-shifts negative data to be strictly positive."""
-        from genetic_automl.preprocessing.distribution_transform import DistributionTransform
+        from genetic_automl.preprocessing.distribution_transform import (
+            DistributionTransform,
+        )
         rng = np.random.default_rng(0)
         X = pd.DataFrame({"neg": rng.normal(-5, 1, 100)})
         dt = DistributionTransform("box-cox")
@@ -631,7 +635,9 @@ class TestDistributionTransformEdgeCases:
 
     def test_log1p_on_negative_auto_shifted(self):
         """log1p shifts negative columns so no NaN/inf is produced."""
-        from genetic_automl.preprocessing.distribution_transform import DistributionTransform
+        from genetic_automl.preprocessing.distribution_transform import (
+            DistributionTransform,
+        )
         X = pd.DataFrame({"neg": [-10.0, -5.0, 0.0, 5.0, 10.0] * 20})
         dt = DistributionTransform("log1p")
         dt.fit(X)
@@ -640,7 +646,9 @@ class TestDistributionTransformEdgeCases:
         assert not np.isinf(out.values).any()
 
     def test_none_method_is_noop(self):
-        from genetic_automl.preprocessing.distribution_transform import DistributionTransform
+        from genetic_automl.preprocessing.distribution_transform import (
+            DistributionTransform,
+        )
         rng = np.random.default_rng(0)
         X = pd.DataFrame(rng.standard_normal((50, 3)), columns=list("abc"))
         dt = DistributionTransform("none")
@@ -649,7 +657,9 @@ class TestDistributionTransformEdgeCases:
         pd.testing.assert_frame_equal(X, out)
 
     def test_yeo_johnson_reduces_skewness(self):
-        from genetic_automl.preprocessing.distribution_transform import DistributionTransform
+        from genetic_automl.preprocessing.distribution_transform import (
+            DistributionTransform,
+        )
         rng = np.random.default_rng(0)
         X = pd.DataFrame({"skewed": rng.exponential(scale=2, size=500)})
         original_skew = abs(X["skewed"].skew())
@@ -714,21 +724,21 @@ class TestDataManagerEdgeCases:
 
 class TestDiversityController:
     def test_hamming_identical_population_zero(self):
-        from genetic_automl.genetic.diversity import mean_pairwise_hamming
         from genetic_automl.genetic.chromosome import Chromosome
+        from genetic_automl.genetic.diversity import mean_pairwise_hamming
         genes = {"a": 1, "b": "x"}
         pop = [Chromosome(genes.copy()) for _ in range(5)]
         assert mean_pairwise_hamming(pop) == pytest.approx(0.0)
 
     def test_hamming_single_chromosome_returns_one(self):
-        from genetic_automl.genetic.diversity import mean_pairwise_hamming
         from genetic_automl.genetic.chromosome import Chromosome
+        from genetic_automl.genetic.diversity import mean_pairwise_hamming
         pop = [Chromosome({"a": 1})]
         assert mean_pairwise_hamming(pop) == pytest.approx(1.0)
 
     def test_injection_maintains_population_size(self):
-        from genetic_automl.genetic.diversity import PopulationDiversity
         from genetic_automl.genetic.chromosome import random_population
+        from genetic_automl.genetic.diversity import PopulationDiversity
         rng = random.Random(0)
         pop = random_population("sklearn", 20, rng)
         for i, c in enumerate(pop):
@@ -738,8 +748,8 @@ class TestDiversityController:
         assert len(new_pop) == 20
 
     def test_mutation_rate_never_exceeds_0_8(self):
-        from genetic_automl.genetic.diversity import PopulationDiversity
         from genetic_automl.genetic.chromosome import random_population
+        from genetic_automl.genetic.diversity import PopulationDiversity
         rng = random.Random(0)
         pop = random_population("sklearn", 10, rng)
         for c in pop:
@@ -749,8 +759,8 @@ class TestDiversityController:
         assert rate <= 0.8, "Mutation rate must be capped at 0.8"
 
     def test_mutation_decays_back_to_base(self):
-        from genetic_automl.genetic.diversity import PopulationDiversity
         from genetic_automl.genetic.chromosome import random_population
+        from genetic_automl.genetic.diversity import PopulationDiversity
         rng = random.Random(0)
         pop = random_population("sklearn", 10, rng)
         for c in pop:
@@ -798,9 +808,9 @@ class TestParetoFront:
 class TestGeneticEngineSmoke:
     def test_engine_runs_and_returns_best(self, clf_Xy):
         from genetic_automl.config import GeneticConfig
+        from genetic_automl.core.problem import ProblemType
         from genetic_automl.genetic.engine import GeneticEngine
         from genetic_automl.genetic.fitness import FitnessEvaluator
-        from genetic_automl.core.problem import ProblemType
 
         X, y = clf_Xy
         evaluator = FitnessEvaluator(
@@ -821,9 +831,9 @@ class TestGeneticEngineSmoke:
 
     def test_engine_history_populated(self, clf_Xy):
         from genetic_automl.config import GeneticConfig
+        from genetic_automl.core.problem import ProblemType
         from genetic_automl.genetic.engine import GeneticEngine
         from genetic_automl.genetic.fitness import FitnessEvaluator
-        from genetic_automl.core.problem import ProblemType
 
         X, y = clf_Xy
         evaluator = FitnessEvaluator(ProblemType.CLASSIFICATION, "label", "sklearn", n_folds=2)
@@ -838,9 +848,9 @@ class TestGeneticEngineSmoke:
 
     def test_warm_start_population_correct_size(self, clf_Xy):
         from genetic_automl.config import GeneticConfig
+        from genetic_automl.core.problem import ProblemType
         from genetic_automl.genetic.engine import GeneticEngine
         from genetic_automl.genetic.fitness import FitnessEvaluator
-        from genetic_automl.core.problem import ProblemType
 
         X, y = clf_Xy
         evaluator = FitnessEvaluator(ProblemType.CLASSIFICATION, "label", "sklearn", n_folds=2)
@@ -860,9 +870,15 @@ class TestGeneticEngineSmoke:
 
 class TestFullPipelineSmoke:
     def _make_clf_config(self):
-        from genetic_automl.config import PipelineConfig, GeneticConfig, AutoMLConfig, ReportConfig
-        from genetic_automl.core.problem import ProblemType
         import tempfile
+
+        from genetic_automl.config import (
+            AutoMLConfig,
+            GeneticConfig,
+            PipelineConfig,
+            ReportConfig,
+        )
+        from genetic_automl.core.problem import ProblemType
         return PipelineConfig(
             problem_type=ProblemType.CLASSIFICATION,
             target_column="label",
@@ -876,6 +892,7 @@ class TestFullPipelineSmoke:
 
     def test_classification_pipeline_e2e(self):
         from sklearn.datasets import load_breast_cancer
+
         from genetic_automl.pipeline import AutoMLPipeline
         data = load_breast_cancer(as_frame=True)
         df = data.frame.rename(columns={"target": "label"})
@@ -886,6 +903,7 @@ class TestFullPipelineSmoke:
 
     def test_predict_returns_correct_shape(self):
         from sklearn.datasets import load_breast_cancer
+
         from genetic_automl.pipeline import AutoMLPipeline
         data = load_breast_cancer(as_frame=True)
         df = data.frame.rename(columns={"target": "label"})
@@ -895,15 +913,17 @@ class TestFullPipelineSmoke:
         assert preds.shape == (len(df),)
 
     def test_predict_before_fit_raises(self):
-        from genetic_automl.pipeline import AutoMLPipeline
         from genetic_automl.config import PipelineConfig
+        from genetic_automl.pipeline import AutoMLPipeline
         pipeline = AutoMLPipeline(PipelineConfig())
         with pytest.raises(RuntimeError, match="fitted"):
             pipeline.predict(pd.DataFrame({"a": [1, 2, 3]}))
 
     def test_report_file_created(self):
         import os
+
         from sklearn.datasets import load_breast_cancer
+
         from genetic_automl.pipeline import AutoMLPipeline
         data = load_breast_cancer(as_frame=True)
         df = data.frame.rename(columns={"target": "label"})

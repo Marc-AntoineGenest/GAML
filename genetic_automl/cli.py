@@ -41,18 +41,16 @@ import textwrap
 from pathlib import Path
 from typing import List, Optional
 
-# ---------------------------------------------------------------------------
-# Top-level imports (needed here for patch()-ability in tests)
-# ---------------------------------------------------------------------------
 from genetic_automl import AutoMLPipeline, load_config
 from genetic_automl.config import (
-    AutoMLConfig, DataConfig, GeneticConfig, PipelineConfig, ReportConfig,
+    AutoMLConfig,
+    DataConfig,
+    GeneticConfig,
+    PipelineConfig,
+    ReportConfig,
 )
 from genetic_automl.core.problem import ProblemType
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _err(msg: str, code: int = 1) -> None:
     """Print an error to stderr and exit."""
@@ -81,9 +79,6 @@ def _load_dataframe(csv_path: Path, backend: str = "pandas"):
         _err(f"Could not read '{csv_path}': {exc}", code=2)
 
 
-# ---------------------------------------------------------------------------
-# fit
-# ---------------------------------------------------------------------------
 
 def _cmd_fit(args: argparse.Namespace) -> int:
     """Run the full GAML pipeline on a CSV file."""
@@ -95,9 +90,6 @@ def _cmd_fit(args: argparse.Namespace) -> int:
     df = _load_dataframe(csv_path, backend=data_backend)
     _info(f"  Rows: {len(df):,}  |  Columns: {len(df.columns)}")
 
-    # -----------------------------------------------------------------------
-    # Build config: start from YAML (if given), then apply CLI overrides.
-    # -----------------------------------------------------------------------
     if args.config:
         config_path = _require_file(args.config, "Config file")
         _info(f"Loading config from '{config_path}' ...")
@@ -106,7 +98,6 @@ def _cmd_fit(args: argparse.Namespace) -> int:
         config = PipelineConfig()
         gene_overrides = {}
 
-    # --- CLI overrides (always win over YAML) ---
     if args.target:
         config.target_column = args.target
 
@@ -195,9 +186,6 @@ def _cmd_fit(args: argparse.Namespace) -> int:
     if args.run_name:
         config.run_name = args.run_name
 
-    # -----------------------------------------------------------------------
-    # Run
-    # -----------------------------------------------------------------------
     _info(
         f"Starting GA run | problem={config.problem_type.value} | "
         f"backend={config.automl.backend} | "
@@ -229,9 +217,6 @@ def _cmd_fit(args: argparse.Namespace) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------
-# predict
-# ---------------------------------------------------------------------------
 
 def _cmd_predict(args: argparse.Namespace) -> int:
     """Load a saved pipeline and run inference on a CSV."""
@@ -304,9 +289,6 @@ def _cmd_predict(args: argparse.Namespace) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------
-# update (partial_fit on new data)
-# ---------------------------------------------------------------------------
 
 def _cmd_update(args: argparse.Namespace) -> int:
     """
@@ -338,9 +320,6 @@ def _cmd_update(args: argparse.Namespace) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------
-# version
-# ---------------------------------------------------------------------------
 
 def _cmd_version(args: argparse.Namespace) -> int:
     from genetic_automl import __version__
@@ -348,9 +327,6 @@ def _cmd_version(args: argparse.Namespace) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------
-# Argument parser
-# ---------------------------------------------------------------------------
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -369,9 +345,6 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
     sub.required = True
 
-    # -----------------------------------------------------------------------
-    # fit
-    # -----------------------------------------------------------------------
     fit_p = sub.add_parser(
         "fit",
         help="Train a GAML pipeline on a CSV file.",
@@ -551,9 +524,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     fit_p.set_defaults(func=_cmd_fit)
 
-    # -----------------------------------------------------------------------
-    # predict
-    # -----------------------------------------------------------------------
     pred_p = sub.add_parser(
         "predict",
         help="Run inference with a saved GAML pipeline.",
@@ -588,9 +558,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     pred_p.set_defaults(func=_cmd_predict)
 
-    # -----------------------------------------------------------------------
-    # version
-    # -----------------------------------------------------------------------
     upd_p = sub.add_parser(
         "update",
         help="Incrementally update a saved pipeline on new data.",
@@ -615,9 +582,6 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 def main(argv: Optional[List[str]] = None) -> int:
     """

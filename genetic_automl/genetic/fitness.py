@@ -22,7 +22,13 @@ from typing import List, Optional
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold, KFold, StratifiedGroupKFold, GroupKFold, TimeSeriesSplit
+from sklearn.model_selection import (
+    GroupKFold,
+    KFold,
+    StratifiedGroupKFold,
+    StratifiedKFold,
+    TimeSeriesSplit,
+)
 
 from genetic_automl.automl import build_automl
 from genetic_automl.core.problem import (
@@ -32,7 +38,10 @@ from genetic_automl.core.problem import (
 )
 from genetic_automl.genetic.chromosome import Chromosome
 from genetic_automl.genetic.surrogate import SurrogateModel
-from genetic_automl.preprocessing.pipeline import PreprocessingConfig, PreprocessingPipeline
+from genetic_automl.preprocessing.pipeline import (
+    PreprocessingConfig,
+    PreprocessingPipeline,
+)
 from genetic_automl.utils.logger import get_logger
 
 log = get_logger(__name__)

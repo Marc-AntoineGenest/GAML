@@ -33,7 +33,6 @@ from genetic_automl.config import PipelineConfig, ReportConfig
 from genetic_automl.core.problem import ProblemType
 from genetic_automl.reporting.shap_explainer import SHAPExplainer, _build_shap_svg
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------

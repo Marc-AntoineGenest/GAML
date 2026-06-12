@@ -78,7 +78,6 @@ class AutoGluonModel(BaseAutoML):
         self._predictor = None
         self._tmp_dir: Optional[str] = None
 
-    # ------------------------------------------------------------------
 
     def fit(
         self,

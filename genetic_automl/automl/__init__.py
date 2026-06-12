@@ -7,6 +7,8 @@ from typing import Any
 from genetic_automl.core.base_automl import BaseAutoML
 from genetic_automl.core.problem import ProblemType
 
+__all__ = ["build_automl"]
+
 # Models that map to model_type gene values within the 'sklearn' backend.
 # Keeping them under one backend avoids proliferating top-level backend names
 # while still letting the GA freely search across model families.
@@ -82,7 +84,6 @@ def build_automl(
                 **kwargs,
             )
         else:
-            # Default: original sklearn GradientBoosting
             from genetic_automl.automl.sklearn_model import SklearnModel
             return SklearnModel(
                 problem_type=problem_type,

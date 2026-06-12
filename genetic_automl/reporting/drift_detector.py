@@ -72,9 +72,6 @@ PSI_CRITICAL  = 0.25   # retrain recommended
 N_PSI_BINS = 10        # decile buckets for PSI
 
 
-# ---------------------------------------------------------------------------
-# Result dataclasses
-# ---------------------------------------------------------------------------
 
 @dataclass
 class FeatureDriftResult:
@@ -150,9 +147,6 @@ class DriftReport:
         return [r.feature for r in self.feature_results if r.severity == "critical"]
 
 
-# ---------------------------------------------------------------------------
-# DriftDetector
-# ---------------------------------------------------------------------------
 
 class DriftDetector:
     """
@@ -183,9 +177,6 @@ class DriftDetector:
         self._bin_edges: Dict[str, np.ndarray] = {}
         self._cat_categories: Dict[str, np.ndarray] = {}
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def fit(self, reference: pd.DataFrame) -> "DriftDetector":
         """
@@ -289,9 +280,6 @@ class DriftDetector:
 
         return report
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     def _check_feature(
         self,
@@ -375,9 +363,6 @@ class DriftDetector:
         )
 
 
-# ---------------------------------------------------------------------------
-# Statistical test helpers
-# ---------------------------------------------------------------------------
 
 def _ks_test(ref: np.ndarray, new: np.ndarray) -> Tuple[float, float]:
     """Two-sample KS test. Returns (statistic, p-value)."""

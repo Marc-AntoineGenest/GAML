@@ -50,7 +50,6 @@ class MissingIndicator:
         self.min_missing_frac = min_missing_frac
         self.indicator_columns: List[str] = []   # original cols that get indicators
 
-    # ------------------------------------------------------------------
 
     def fit(self, X: pd.DataFrame) -> "MissingIndicator":
         """Fit on raw (pre-imputation) data to detect originally-missing columns."""

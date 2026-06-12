@@ -1,5 +1,5 @@
 """
-Tests for Phase 2 — RandomForest model zoo addition + surrogate-assisted GA.
+Tests for RandomForest model backend and surrogate-assisted GA.
 
   1. RandomForestModel — unit tests
   2. build_automl dispatches on model_type='rf'
@@ -20,17 +20,20 @@ import pandas as pd
 import pytest
 
 from genetic_automl.automl import build_automl
-from genetic_automl.automl.rf_model import RandomForestModel
 from genetic_automl.automl.lgbm_model import LGBMModel
+from genetic_automl.automl.rf_model import RandomForestModel
 from genetic_automl.config import (
-    AutoMLConfig, DataConfig, EnsembleConfig, GeneticConfig,
-    PipelineConfig, ReportConfig,
+    AutoMLConfig,
+    DataConfig,
+    EnsembleConfig,
+    GeneticConfig,
+    PipelineConfig,
+    ReportConfig,
 )
 from genetic_automl.core.problem import ProblemType
 from genetic_automl.genetic.chromosome import Chromosome, get_gene_space
 from genetic_automl.genetic.surrogate import SurrogateModel
 from genetic_automl.pipeline import AutoMLPipeline
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -434,7 +437,10 @@ class TestSurrogatePipelineIntegration:
         """RF can be both a GA model (in model_type gene) and the surrogate."""
         cfg = _surrogate_config("rf")
         # Force GA to only search RF models so RF does double duty
-        from genetic_automl.genetic.chromosome import GeneDefinition, build_gene_space_from_config
+        from genetic_automl.genetic.chromosome import (
+            GeneDefinition,
+            build_gene_space_from_config,
+        )
         pipeline = AutoMLPipeline(cfg)
         pipeline.fit(clf_df)
         assert pipeline.final_score is not None

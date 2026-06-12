@@ -41,7 +41,6 @@ from genetic_automl.genetic.chromosome import Chromosome
 from genetic_automl.genetic.engine import EvolutionHistory
 from genetic_automl.genetic.island_engine import IslandEngine
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------

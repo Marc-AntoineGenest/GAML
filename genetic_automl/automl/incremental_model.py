@@ -139,9 +139,6 @@ class IncrementalModel(BaseAutoML):
         self._fit_start: float = 0.0
         self._fit_duration: float = 0.0
 
-    # ------------------------------------------------------------------
-    # BaseAutoML interface
-    # ------------------------------------------------------------------
 
     def fit(
         self,
@@ -253,9 +250,6 @@ class IncrementalModel(BaseAutoML):
         """Number of fit/partial_fit calls completed."""
         return self._n_batches_seen
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     def _build_estimator(self) -> Any:
         """Instantiate the underlying sklearn estimator."""

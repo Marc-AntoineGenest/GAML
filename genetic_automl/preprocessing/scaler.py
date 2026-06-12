@@ -46,7 +46,6 @@ class Scaler:
         self._col_scalers: Dict[str, object] = {}
         self._num_cols: List[str] = []
 
-    # ------------------------------------------------------------------
 
     def fit(self, X: pd.DataFrame, y: pd.Series = None) -> "Scaler":
         self._num_cols = X.select_dtypes(include="number").columns.tolist()
@@ -77,7 +76,6 @@ class Scaler:
     def fit_transform(self, X: pd.DataFrame, y: pd.Series = None) -> pd.DataFrame:
         return self.fit(X, y).transform(X)
 
-    # ------------------------------------------------------------------
 
     def _build_scaler(self):
         if self.method == "standard":

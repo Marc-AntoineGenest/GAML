@@ -27,9 +27,9 @@ import pandas as pd
 
 from genetic_automl.core.problem import ProblemType
 from genetic_automl.preprocessing.categorical_encoder import CategoricalEncoder
-from genetic_automl.preprocessing.feature_engineer import FeatureEngineer
 from genetic_automl.preprocessing.correlation_filter import CorrelationFilter
 from genetic_automl.preprocessing.distribution_transform import DistributionTransform
+from genetic_automl.preprocessing.feature_engineer import FeatureEngineer
 from genetic_automl.preprocessing.feature_selector import FeatureSelector
 from genetic_automl.preprocessing.imbalance_handler import ImbalanceHandler
 from genetic_automl.preprocessing.missing_indicator import MissingIndicator
@@ -113,7 +113,6 @@ class PreprocessingPipeline:
             random_seed=random_seed,
         )
 
-    # ------------------------------------------------------------------
 
     def fit_transform_train(
         self,

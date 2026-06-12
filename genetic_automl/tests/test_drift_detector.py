@@ -40,10 +40,12 @@ import pytest
 from genetic_automl.config import PipelineConfig, ReportConfig
 from genetic_automl.core.problem import ProblemType
 from genetic_automl.reporting.drift_detector import (
-    DriftDetector, DriftReport,
-    _compute_psi, _ks_test, _is_continuous,
+    DriftDetector,
+    DriftReport,
+    _compute_psi,
+    _is_continuous,
+    _ks_test,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

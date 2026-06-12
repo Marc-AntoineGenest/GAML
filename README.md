@@ -1,8 +1,16 @@
-# GAML — Genetic AutoML
+<div align=center>
 
-[![CI](https://github.com/Marc-AntoineGenest/GAML/actions/workflows/ci.yml/badge.svg)](https://github.com/Marc-AntoineGenest/GAML/actions/workflows/ci.yml)
+<img src="images/GAML.png" width="600">
 
-A genetic algorithm that simultaneously searches over **preprocessing pipelines** and **model hyperparameters** for tabular data. Every candidate is scored with cross-validation; the best configuration is automatically selected and refit on your full dataset.
+## Turn raw tabular data into production-ready ML models with zero code.
+
+![Python Versions](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
+[![GitHub license](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)  
+[![Continuous Integration](https://github.com/Marc-AntoineGenest/GAML/actions/workflows/ci.yml/badge.svg)](https://github.com/Marc-AntoineGenest/GAML/actions/workflows/ci.yml)
+
+</div>
+
+GAML is a genetic algorithm that simultaneously searches over **preprocessing pipelines** and **model hyperparameters** for tabular data. Every candidate is scored with cross-validation; the best configuration is automatically selected and refit on your full dataset.
 
 ---
 

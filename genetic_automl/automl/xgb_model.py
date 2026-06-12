@@ -73,7 +73,6 @@ class XGBModel(BaseAutoML):
         self._estimator = None
         self._label_encoder = None  # needed when y contains non-integer class labels
 
-    # ------------------------------------------------------------------
 
     def _build_estimator(self):
         try:
@@ -164,9 +163,6 @@ class XGBModel(BaseAutoML):
             "learning_rate": self.learning_rate,
         }
 
-    # ------------------------------------------------------------------
-    # Label encoding helpers
-    # ------------------------------------------------------------------
 
     def _encode_labels(self, y_train: pd.Series, y_val=None):
         """

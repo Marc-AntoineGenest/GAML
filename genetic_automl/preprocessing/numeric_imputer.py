@@ -46,7 +46,6 @@ class NumericImputer:
         self._imputer = None
         self._num_cols: List[str] = []
 
-    # ------------------------------------------------------------------
 
     def fit(self, X: pd.DataFrame, y: pd.Series = None) -> "NumericImputer":
         self._num_cols = X.select_dtypes(include="number").columns.tolist()
@@ -79,7 +78,6 @@ class NumericImputer:
     def fit_transform(self, X: pd.DataFrame, y: pd.Series = None) -> pd.DataFrame:
         return self.fit(X, y).transform(X)
 
-    # ------------------------------------------------------------------
 
     def _build_imputer(self):
         if self.strategy in ("mean", "median", "constant"):

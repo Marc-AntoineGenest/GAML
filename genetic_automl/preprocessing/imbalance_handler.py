@@ -58,7 +58,6 @@ class ImbalanceHandler:
         self._class_weights: Optional[dict] = None
         self._effective_method = method  # may be changed to fallback
 
-    # ------------------------------------------------------------------
 
     def fit(self, X: pd.DataFrame, y: pd.Series) -> "ImbalanceHandler":
         """Learn class distribution. For SMOTE methods, no fitting is needed."""
@@ -147,7 +146,6 @@ class ImbalanceHandler:
             return None
         return np.array([self._class_weights.get(label, 1.0) for label in y])
 
-    # ------------------------------------------------------------------
 
     def _compute_class_weights(self, y: pd.Series) -> dict:
         from sklearn.utils.class_weight import compute_class_weight

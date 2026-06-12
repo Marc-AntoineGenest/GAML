@@ -16,8 +16,9 @@ The key invariant:
   GA fitness is measured on val (via CV on train+val).
   Final score is measured on test — completely independent.
 
-Designed to be swappable: a future Polars or Spark backend
-just needs to implement the same public interface.
+Designed to be swappable: pass backend="polars" to load() for 2-10x faster
+file loading on large datasets. The result is always a pandas DataFrame so
+the rest of the GAML stack is unaffected.
 """
 
 from __future__ import annotations
@@ -77,9 +78,6 @@ class DataManager:
         self._val: Optional[pd.DataFrame] = None
         self._test: Optional[pd.DataFrame] = None
 
-    # ------------------------------------------------------------------
-    # Public interface
-    # ------------------------------------------------------------------
 
     def load(
         self, path: str, backend: str = "pandas"
@@ -220,9 +218,6 @@ class DataManager:
         train, _val, test = self.three_way_split(df, test_df)
         return train, test
 
-    # ------------------------------------------------------------------
-    # Properties
-    # ------------------------------------------------------------------
 
     @property
     def train(self) -> pd.DataFrame:
@@ -248,9 +243,6 @@ class DataManager:
     def labels(self, df: pd.DataFrame) -> pd.Series:
         return df[self.target_column]
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
 
     def _split_two(
         self,

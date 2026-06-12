@@ -72,9 +72,6 @@ _CROWD_ATTR    = "_nsga2_crowding"
 _INF_CROWD     = float("inf")
 
 
-# ---------------------------------------------------------------------------
-# Core NSGA-II operators
-# ---------------------------------------------------------------------------
 
 def dominates(a_obj: List[float], b_obj: List[float]) -> bool:
     """
@@ -288,9 +285,6 @@ def nsga2_survive(
     return survivors
 
 
-# ---------------------------------------------------------------------------
-# Objective extraction helpers
-# ---------------------------------------------------------------------------
 
 def build_objective_values(
     population: List[Chromosome],

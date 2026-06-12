@@ -70,7 +70,6 @@ class LGBMModel(BaseAutoML):
         self.colsample_bytree = colsample_bytree
         self._estimator = None
 
-    # ------------------------------------------------------------------
 
     def _build_estimator(self):
         try:
@@ -157,11 +156,9 @@ class LGBMModel(BaseAutoML):
         }
 
 
-# ------------------------------------------------------------------
 # Helper: build a LightGBM early-stopping callback compatible with
 # both lgbm 3.x (EarlyStopping class) and lgbm 4.x (same API, but
 # the import path changed slightly in some builds).
-# ------------------------------------------------------------------
 
 def _make_early_stopping_callback(rounds: int):
     """Return a LightGBM early-stopping callback, handling version differences."""

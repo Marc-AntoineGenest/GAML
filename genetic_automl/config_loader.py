@@ -19,8 +19,8 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 from genetic_automl.config import (
-    CalibrationConfig,
     AutoMLConfig,
+    CalibrationConfig,
     DataConfig,
     EnsembleConfig,
     GeneticConfig,

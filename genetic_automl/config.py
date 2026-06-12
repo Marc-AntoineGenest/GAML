@@ -306,7 +306,7 @@ class EnsembleConfig:
     """
     When True, refit and combine the top-k unique chromosomes into a
     soft-voting / averaging ensemble.  When False, only the single best
-    chromosome is used (original behaviour).
+    chromosome is used.
     """
 
     top_k: int = 3
@@ -333,7 +333,7 @@ class OptunaConfig:
     Tree-structured Parzen Estimation (TPE).
 
     Set enabled=False to skip HPO and use the GA chromosome's hyperparameters
-    as-is (original behaviour).
+    as-is.
     """
 
     enabled: bool = False

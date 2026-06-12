@@ -16,7 +16,6 @@ Design notes
 - Weights default to equal (1/N per model).  Callers may supply custom weights,
   e.g. proportional to each member's CV fitness.
 - The ensemble is intentionally lightweight — no meta-learner training here.
-  Meta-learner stacking (Phase 2) will extend this class later.
 """
 
 from __future__ import annotations
@@ -64,9 +63,6 @@ class EnsembleModel(BaseAutoML):
         # The ensemble is ready to predict immediately — members are pre-fitted.
         self._is_fitted = True
 
-    # ------------------------------------------------------------------
-    # BaseAutoML interface
-    # ------------------------------------------------------------------
 
     def fit(
         self,
@@ -159,9 +155,6 @@ class EnsembleModel(BaseAutoML):
             f"problem={self.problem_type.value})"
         )
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     def _averaged_predictions(self, X: pd.DataFrame) -> np.ndarray:
         """Weighted average of regression predictions."""

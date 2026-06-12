@@ -81,7 +81,10 @@ class FeatureSelector:
                 self._selected_cols = list(X.columns)
 
         elif self.method == "mutual_info":
-            from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
+            from sklearn.feature_selection import (
+                mutual_info_classif,
+                mutual_info_regression,
+            )
             fn = mutual_info_classif if self.problem_type_str == "classification" else mutual_info_regression
             try:
                 scores = fn(X.fillna(0), y, random_state=self.random_seed)

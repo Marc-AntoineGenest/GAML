@@ -75,7 +75,6 @@ class RandomForestModel(BaseAutoML):
         self.max_features = max_features
         self._estimator = None
 
-    # ------------------------------------------------------------------
 
     def _build_estimator(self):
         params = dict(

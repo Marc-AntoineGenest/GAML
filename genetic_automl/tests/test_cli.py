@@ -25,14 +25,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from genetic_automl.cli import main, _build_parser
-
+from genetic_automl.cli import _build_parser, main
 
 # ---------------------------------------------------------------------------
 # Fixtures

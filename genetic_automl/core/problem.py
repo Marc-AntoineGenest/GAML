@@ -35,9 +35,6 @@ class MetricDirection(str, Enum):
     MINIMIZE = "minimize"
 
 
-# ---------------------------------------------------------------------------
-# Metric registry
-# ---------------------------------------------------------------------------
 
 _METRIC_REGISTRY: Dict[str, Tuple[Any, MetricDirection]] = {
     # Classification
@@ -113,9 +110,6 @@ def fitness_sign(metric_name: str) -> int:
     return 1 if metric_direction(metric_name) == MetricDirection.MAXIMIZE else -1
 
 
-# ---------------------------------------------------------------------------
-# Multi-objective helpers (Pareto front)
-# ---------------------------------------------------------------------------
 
 def pareto_front(scores: List[List[float]]) -> List[int]:
     """

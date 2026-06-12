@@ -3,16 +3,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from genetic_automl.preprocessing.pipeline import PreprocessingConfig, PreprocessingPipeline
+from genetic_automl.core.problem import ProblemType
+from genetic_automl.preprocessing.categorical_encoder import CategoricalEncoder
+from genetic_automl.preprocessing.correlation_filter import CorrelationFilter
+from genetic_automl.preprocessing.distribution_transform import DistributionTransform
+from genetic_automl.preprocessing.feature_selector import FeatureSelector
+from genetic_automl.preprocessing.missing_indicator import MissingIndicator
 from genetic_automl.preprocessing.numeric_imputer import NumericImputer
 from genetic_automl.preprocessing.outlier_handler import OutlierHandler
-from genetic_automl.preprocessing.correlation_filter import CorrelationFilter
-from genetic_automl.preprocessing.categorical_encoder import CategoricalEncoder
-from genetic_automl.preprocessing.distribution_transform import DistributionTransform
-from genetic_automl.preprocessing.missing_indicator import MissingIndicator
-from genetic_automl.preprocessing.feature_selector import FeatureSelector
-from genetic_automl.core.problem import ProblemType
-
+from genetic_automl.preprocessing.pipeline import (
+    PreprocessingConfig,
+    PreprocessingPipeline,
+)
 
 # ---------------------------------------------------------------------------
 # NumericImputer
@@ -250,3 +252,117 @@ class TestPreprocessingPipeline:
         X_val_out = pp.transform(X_val)
         # All NaNs should fill to 2.0 (train median), not some val-based value
         assert np.allclose(X_val_out["a"].values, 2.0)
+
+
+# Regression tests for confirmed bugs (fixed)
+
+class TestBugRegressions:
+    """Regression tests for bugs that were confirmed and fixed.
+
+    Each test documents the original failure mode and asserts the fix holds.
+    An XPASS on any of these means the regression was re-introduced.
+    """
+
+    def test_b3_roc_auc_routing_is_correct(self):
+        """B3: roc_auc crashed on multiclass with hard-label predictions.
+
+        Fixed: _METRIC_REGISTRY['roc_auc'] now routes by input shape and class
+        count. Hard labels for multiclass raise ValueError with a clear message.
+        """
+        import numpy as np
+        from genetic_automl.core.problem import _METRIC_REGISTRY
+
+        fn, _ = _METRIC_REGISTRY["roc_auc"]
+
+        rng = np.random.default_rng(0)
+        y_true_multi = np.array([0, 1, 2, 0, 1, 2])
+        raw = rng.random((6, 3))
+        proba_matrix = raw / raw.sum(axis=1, keepdims=True)
+        assert 0.0 <= fn(y_true_multi, proba_matrix) <= 1.0
+
+        y_true_bin = np.array([0, 1, 0, 1, 0, 1])
+        scores_bin = np.array([0.1, 0.9, 0.2, 0.8, 0.3, 0.7])
+        assert 0.0 <= fn(y_true_bin, scores_bin) <= 1.0
+
+        import pytest
+        y_pred_hard = np.array([0, 1, 2, 0, 2, 1])
+        with pytest.raises(ValueError, match="roc_auc requires probability scores"):
+            fn(y_true_multi, y_pred_hard)
+
+    def test_b6_isolation_forest_clip_uses_train_median(self):
+        """B6: IsolationForest clip replaced values with val/test median (leakage).
+
+        Fixed: OutlierHandler.transform() now uses training statistics stored at fit.
+        """
+        import numpy as np
+        import pandas as pd
+        from genetic_automl.preprocessing.outlier_handler import OutlierHandler
+
+        rng = np.random.default_rng(0)
+        X_train = pd.DataFrame({"a": rng.standard_normal(200)})
+        X_val = pd.DataFrame({"a": np.array([100.0, 200.0, 300.0, 400.0, 500.0])})
+
+        oh = OutlierHandler("isolation_forest", action="clip")
+        oh.fit(X_train)
+        X_val_out = oh.transform(X_val)
+        assert X_val_out["a"].max() < 10.0
+
+    def test_b7_feature_selector_raises_on_column_mismatch(self):
+        """B7: FeatureSelector silently returned empty DataFrame on column mismatch.
+
+        Fixed: transform() now raises ValueError when selected columns are absent.
+        """
+        import numpy as np
+        import pandas as pd
+        import pytest
+        from genetic_automl.preprocessing.feature_selector import FeatureSelector
+
+        rng = np.random.default_rng(0)
+        X_train = pd.DataFrame(rng.standard_normal((100, 3)), columns=["a", "b", "c"])
+        y = pd.Series(rng.integers(0, 2, 100))
+
+        fs = FeatureSelector("mutual_info", keep_k=1.0)
+        fs.fit(X_train, y)
+
+        X_val = pd.DataFrame(rng.standard_normal((10, 2)), columns=["x", "y"])
+        with pytest.raises(ValueError, match="missing from input"):
+            fs.transform(X_val)
+
+    def test_b8_ordinal_unseen_not_negative(self):
+        """B8: CategoricalEncoder(ordinal) mapped unseen categories to -1.
+
+        Fixed: unseen categories now map to 0 (neutral ordinal) to avoid
+        corrupting distance-based models.
+        """
+        import pandas as pd
+        from genetic_automl.preprocessing.categorical_encoder import CategoricalEncoder
+
+        X_train = pd.DataFrame({"cat": ["A", "B", "C"]})
+        X_val = pd.DataFrame({"cat": ["D"]})
+        enc = CategoricalEncoder("ordinal")
+        enc.fit(X_train)
+        X_out = enc.transform(X_val)
+        assert X_out["cat"].iloc[0] >= 0
+
+    def test_b5_halving_evaluator_with_n_folds_1(self):
+        """B5: WarmStart halving used FitnessEvaluator(n_folds=1) causing silent -inf.
+
+        Fixed: halving now uses train_test_split instead of StratifiedKFold(n_splits=1).
+        The evaluator behaviour with n_folds=1 is unchanged: returns -inf, which is
+        expected and guarded against in WarmStart.
+        """
+        import random
+        import numpy as np
+        import pandas as pd
+        from genetic_automl.genetic.chromosome import random_population
+        from genetic_automl.genetic.fitness import FitnessEvaluator
+        from genetic_automl.core.problem import ProblemType
+
+        rng = np.random.default_rng(0)
+        X = pd.DataFrame(rng.standard_normal((100, 3)), columns=list("abc"))
+        y = pd.Series(rng.integers(0, 2, 100))
+
+        ev = FitnessEvaluator(ProblemType.CLASSIFICATION, "label", "sklearn", n_folds=1)
+        chrom = random_population("sklearn", 1, random.Random(0))[0]
+        fitness = ev.evaluate(chrom, X, y)
+        assert fitness == float("-inf")

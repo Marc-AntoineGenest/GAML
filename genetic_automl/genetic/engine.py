@@ -28,29 +28,41 @@ try:
 except ImportError:
     _TQDM_AVAILABLE = False
 
+import os
+
+import joblib
+
 from genetic_automl.config import GeneticConfig
-from genetic_automl.genetic.chromosome import Chromosome, build_gene_space_from_config, random_population
+from genetic_automl.genetic.chromosome import (
+    Chromosome,
+    build_gene_space_from_config,
+    random_population,
+)
 from genetic_automl.genetic.diversity import PopulationDiversity
 from genetic_automl.genetic.fitness import FitnessEvaluator
-import os
-import joblib
-from genetic_automl.genetic.surrogate import SurrogateModel
+from genetic_automl.genetic.nsga2 import (
+    build_objective_values,
+    crowding_distance_assignment,
+    fast_non_dominated_sort,
+    nsga2_select,
+    nsga2_survive,
+    pareto_front_summary,
+)
 from genetic_automl.genetic.operators import (
     elites,
     mutate,
     single_point_crossover,
-    uniform_crossover,
     tournament_selection,
+    uniform_crossover,
 )
+from genetic_automl.genetic.surrogate import SurrogateModel
 from genetic_automl.genetic.warm_start import WarmStart
-from genetic_automl.genetic.nsga2 import (
-    build_objective_values, crowding_distance_assignment,
-    fast_non_dominated_sort, nsga2_select, nsga2_survive,
-    pareto_front_summary,
-)
 from genetic_automl.utils.logger import get_logger
 
 log = get_logger(__name__)
+
+# Sentinel: no stagnation limit when adaptive mutation is disabled.
+_NO_STAGNATION_LIMIT = 999_999
 
 
 @dataclass
@@ -108,10 +120,8 @@ class EvolutionHistory:
         if not evaluated:
             return []
 
-        # Sort best → worst
         ranked = sorted(evaluated, key=lambda c: c.fitness, reverse=True)
 
-        # Deduplicate by gene fingerprint
         seen: set = set()
         unique: List[Chromosome] = []
         for chrom in ranked:
@@ -159,7 +169,7 @@ class GeneticEngine:
             injection_ratio=genetic_config.diversity_injection_ratio,
             stagnation_rounds=(
                 genetic_config.adaptive_mutation_stagnation_rounds
-                if genetic_config.adaptive_mutation else 999_999
+                if genetic_config.adaptive_mutation else _NO_STAGNATION_LIMIT
             ),
             mutation_boost_factor=genetic_config.adaptive_mutation_boost_factor,
             mutation_decay=genetic_config.adaptive_mutation_decay,
@@ -167,9 +177,6 @@ class GeneticEngine:
             gene_space=self._gene_space,
         )
 
-        # Build surrogate and inject into evaluator.
-        # The surrogate shares the evaluator's fitness cache indirectly:
-        # SurrogateModel.update() is fed the history of evaluated chromosomes.
         if genetic_config.surrogate_enabled:
             surrogate = SurrogateModel(
                 model_type=genetic_config.surrogate_model_type,
@@ -209,7 +216,6 @@ class GeneticEngine:
         best_fitness_so_far = float("-inf")
         start_gen = 0
 
-        # Checkpoint resume: restore saved state and fast-forward the gen range.
         if cfg.resume_from_checkpoint:
             state = self._load_checkpoint(cfg.resume_from_checkpoint)
             if state is not None:
@@ -319,7 +325,6 @@ class GeneticEngine:
                     objective_values=obj_vals,
                 )
 
-        # Store Pareto front in history when NSGA-II was active
         if cfg.nsga2_enabled:
             objectives = cfg.nsga2_objectives or [self.evaluator.metric, "complexity"]
             self.history.pareto_front = pareto_front_summary(
@@ -353,10 +358,6 @@ class GeneticEngine:
                 s["skip_rate"] * 100,
             )
         return best
-
-    # ------------------------------------------------------------------
-    # Checkpoint helpers
-    # ------------------------------------------------------------------
 
     def _save_checkpoint(
         self,
@@ -482,7 +483,7 @@ class GeneticEngine:
             best n individuals from combined parents + offspring.
 
         When nsga2_enabled=False (default):
-          - Standard elitism + fitness tournament (original behaviour).
+          - Standard elitism + fitness tournament selection.
         """
         use_nsga2 = self.cfg.nsga2_enabled and objective_values is not None
 
@@ -525,7 +526,7 @@ class GeneticEngine:
                                      objective_values, n_obj)
             return survived[: self.cfg.population_size]
 
-        # --- Standard single-objective breeding (original behaviour) --------
+        # Standard single-objective breeding
         new_pop: List[Chromosome] = []
         elite_individuals = elites(population, self.cfg.elite_ratio)
         new_pop.extend(elite_individuals)

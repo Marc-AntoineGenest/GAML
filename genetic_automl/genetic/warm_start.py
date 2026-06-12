@@ -181,10 +181,14 @@ class WarmStart:
     ) -> List[Chromosome]:
         """Evaluate n_pool random candidates with an 80/20 split; return top n_keep."""
         from sklearn.model_selection import train_test_split as _tts
-        from genetic_automl.core.problem import fitness_sign, compute_metric
-        from genetic_automl.preprocessing.pipeline import PreprocessingConfig, PreprocessingPipeline
+
         from genetic_automl.automl import build_automl
+        from genetic_automl.core.problem import compute_metric, fitness_sign
         from genetic_automl.genetic.fitness import _split_genes
+        from genetic_automl.preprocessing.pipeline import (
+            PreprocessingConfig,
+            PreprocessingPipeline,
+        )
 
         stratify = y_train if evaluator.problem_type.value == "classification" else None
         try:

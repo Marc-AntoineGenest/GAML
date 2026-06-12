@@ -33,7 +33,6 @@ class MLflowLogger:
         self._run_id: Optional[str] = None
         self._available = self._try_import()
 
-    # ------------------------------------------------------------------
 
     def _try_import(self) -> bool:
         try:
@@ -73,9 +72,6 @@ class MLflowLogger:
             self._mlflow.end_run()
             log.info("MLflow run ended: %s", self._run_id)
 
-    # ------------------------------------------------------------------
-    # Convenience: log full evolution history
-    # ------------------------------------------------------------------
 
     def log_evolution(self, history: EvolutionHistory, run_name: str) -> None:
         """Log all generation stats and the best chromosome."""
@@ -92,9 +88,6 @@ class MLflowLogger:
         finally:
             self.end_run()
 
-    # ------------------------------------------------------------------
-    # JSON fallback
-    # ------------------------------------------------------------------
 
     def save_json(self, history: EvolutionHistory, path: str) -> None:
         """Always available fallback: write evolution history to JSON."""

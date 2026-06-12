@@ -91,9 +91,6 @@ class FeatureEngineer:
         self._log1p_cols: List[str] = []           # cols with high skewness
         self._is_fitted = False
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def fit(self, X: pd.DataFrame, y: pd.Series = None) -> "FeatureEngineer":
         if self.strategy == "none":
@@ -148,9 +145,6 @@ class FeatureEngineer:
     def fit_transform(self, X: pd.DataFrame, y: pd.Series = None) -> pd.DataFrame:
         return self.fit(X, y).transform(X)
 
-    # ------------------------------------------------------------------
-    # Private helpers — feature generation
-    # ------------------------------------------------------------------
 
     def _apply_poly2(self, X: pd.DataFrame) -> pd.DataFrame:
         cols = [c for c in self._poly_cols if c in X.columns]
@@ -189,9 +183,6 @@ class FeatureEngineer:
             X = pd.concat([X, pd.DataFrame(new, index=X.index)], axis=1)
         return X
 
-    # ------------------------------------------------------------------
-    # Private helpers — column selection at fit time
-    # ------------------------------------------------------------------
 
     def _select_top_variant(self, X: pd.DataFrame, num_cols: List[str]) -> List[str]:
         """Select top-N numeric columns by variance (most information-dense)."""
