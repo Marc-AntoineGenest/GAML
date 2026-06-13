@@ -1,7 +1,6 @@
 """Genetic AutoML -- top-level package."""
 from __future__ import annotations
 
-
 __version__ = "0.1.0"
 from genetic_automl.config import (
     AutoMLConfig,

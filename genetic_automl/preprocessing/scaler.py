@@ -23,7 +23,6 @@ are left untouched.
 
 from __future__ import annotations
 
-
 import pandas as pd
 
 from genetic_automl.utils.logger import get_logger

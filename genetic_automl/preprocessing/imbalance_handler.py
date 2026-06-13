@@ -21,7 +21,6 @@ When imbalanced-learn is not installed, 'smote', 'borderline_smote', and
 
 from __future__ import annotations
 
-
 import numpy as np
 import pandas as pd
 

@@ -272,6 +272,7 @@ class TestBugRegressions:
         count. Hard labels for multiclass raise ValueError with a clear message.
         """
         import numpy as np
+
         from genetic_automl.core.problem import _METRIC_REGISTRY
 
         fn, _ = _METRIC_REGISTRY["roc_auc"]
@@ -298,6 +299,7 @@ class TestBugRegressions:
         """
         import numpy as np
         import pandas as pd
+
         from genetic_automl.preprocessing.outlier_handler import OutlierHandler
 
         rng = np.random.default_rng(0)
@@ -317,6 +319,7 @@ class TestBugRegressions:
         import numpy as np
         import pandas as pd
         import pytest
+
         from genetic_automl.preprocessing.feature_selector import FeatureSelector
 
         rng = np.random.default_rng(0)
@@ -337,6 +340,7 @@ class TestBugRegressions:
         corrupting distance-based models.
         """
         import pandas as pd
+
         from genetic_automl.preprocessing.categorical_encoder import CategoricalEncoder
 
         X_train = pd.DataFrame({"cat": ["A", "B", "C"]})
@@ -354,11 +358,13 @@ class TestBugRegressions:
         expected and guarded against in WarmStart.
         """
         import random
+
         import numpy as np
         import pandas as pd
+
+        from genetic_automl.core.problem import ProblemType
         from genetic_automl.genetic.chromosome import random_population
         from genetic_automl.genetic.fitness import FitnessEvaluator
-        from genetic_automl.core.problem import ProblemType
 
         rng = np.random.default_rng(0)
         X = pd.DataFrame(rng.standard_normal((100, 3)), columns=list("abc"))

@@ -21,7 +21,6 @@ of training samples were missing (avoids noise from near-zero missingness).
 
 from __future__ import annotations
 
-
 import pandas as pd
 
 from genetic_automl.utils.logger import get_logger

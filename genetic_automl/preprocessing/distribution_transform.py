@@ -21,7 +21,6 @@ Columns below the skew threshold are left untouched to avoid unnecessary distort
 
 from __future__ import annotations
 
-
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import PowerTransformer

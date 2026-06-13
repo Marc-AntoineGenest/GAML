@@ -15,7 +15,6 @@ Missing values are filled with '__MISSING__' before encoding.
 
 from __future__ import annotations
 
-
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold

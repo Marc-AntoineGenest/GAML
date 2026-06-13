@@ -40,7 +40,6 @@ import sys
 import textwrap
 from pathlib import Path
 
-
 from genetic_automl import AutoMLPipeline, load_config
 from genetic_automl.config import (
     AutoMLConfig,
