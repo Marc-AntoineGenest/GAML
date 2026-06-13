@@ -50,7 +50,6 @@ Design decisions
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -86,13 +85,13 @@ class FeatureEngineer:
         self.max_interaction_features = max_interaction_features
 
         # Set at fit time
-        self._poly_cols: List[str] = []            # source cols for poly2
-        self._ratio_pairs: List[Tuple[str, str]] = []  # (num_col, denom_col)
-        self._log1p_cols: List[str] = []           # cols with high skewness
+        self._poly_cols: list[str] = []            # source cols for poly2
+        self._ratio_pairs: list[tuple[str, str]] = []  # (num_col, denom_col)
+        self._log1p_cols: list[str] = []           # cols with high skewness
         self._is_fitted = False
 
 
-    def fit(self, X: pd.DataFrame, y: pd.Series = None) -> "FeatureEngineer":
+    def fit(self, X: pd.DataFrame, y: pd.Series = None) -> FeatureEngineer:
         if self.strategy == "none":
             self._is_fitted = True
             return self
@@ -184,7 +183,7 @@ class FeatureEngineer:
         return X
 
 
-    def _select_top_variant(self, X: pd.DataFrame, num_cols: List[str]) -> List[str]:
+    def _select_top_variant(self, X: pd.DataFrame, num_cols: list[str]) -> list[str]:
         """Select top-N numeric columns by variance (most information-dense)."""
         if not num_cols:
             return []
@@ -193,8 +192,8 @@ class FeatureEngineer:
         return top
 
     def _select_ratio_pairs(
-        self, X: pd.DataFrame, num_cols: List[str]
-    ) -> List[Tuple[str, str]]:
+        self, X: pd.DataFrame, num_cols: list[str]
+    ) -> list[tuple[str, str]]:
         """
         Select pairs (a, b) where a and b are highly correlated — the pairs
         where a ratio is most likely to reveal a meaningful relationship.
@@ -222,7 +221,7 @@ class FeatureEngineer:
         pairs.sort(reverse=True)
         return [(c1, c2) for _, c1, c2 in pairs[: self.max_interaction_features]]
 
-    def _select_skewed(self, X: pd.DataFrame, num_cols: List[str]) -> List[str]:
+    def _select_skewed(self, X: pd.DataFrame, num_cols: list[str]) -> list[str]:
         """Select columns whose skewness exceeds the threshold."""
         skewed = []
         for col in num_cols:

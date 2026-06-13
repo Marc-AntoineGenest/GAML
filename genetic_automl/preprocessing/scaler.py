@@ -23,7 +23,6 @@ are left untouched.
 
 from __future__ import annotations
 
-from typing import Dict, List
 
 import pandas as pd
 
@@ -43,11 +42,11 @@ class Scaler:
     def __init__(self, method: str = "standard") -> None:
         self.method = method
         # Per-column scaler instances: {col_name: fitted_sklearn_scaler}
-        self._col_scalers: Dict[str, object] = {}
-        self._num_cols: List[str] = []
+        self._col_scalers: dict[str, object] = {}
+        self._num_cols: list[str] = []
 
 
-    def fit(self, X: pd.DataFrame, y: pd.Series = None) -> "Scaler":
+    def fit(self, X: pd.DataFrame, y: pd.Series = None) -> Scaler:
         self._num_cols = X.select_dtypes(include="number").columns.tolist()
         self._col_scalers = {}
 

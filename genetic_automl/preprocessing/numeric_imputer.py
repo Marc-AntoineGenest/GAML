@@ -16,7 +16,6 @@ Categorical columns are handled by CategoricalEncoder, not here.
 
 from __future__ import annotations
 
-from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -44,10 +43,10 @@ class NumericImputer:
             raise ValueError(f"strategy must be one of {_VALID}, got '{strategy}'")
         self.strategy = strategy
         self._imputer = None
-        self._num_cols: List[str] = []
+        self._num_cols: list[str] = []
 
 
-    def fit(self, X: pd.DataFrame, y: pd.Series = None) -> "NumericImputer":
+    def fit(self, X: pd.DataFrame, y: pd.Series = None) -> NumericImputer:
         self._num_cols = X.select_dtypes(include="number").columns.tolist()
 
         if not self._num_cols:

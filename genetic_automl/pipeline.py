@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Optional
+
 
 import numpy as np
 import pandas as pd
@@ -46,7 +46,7 @@ from genetic_automl.utils.logger import get_logger
 log = get_logger(__name__)
 
 
-def _apply_calibration(model, X: "pd.DataFrame", y: "pd.Series",
+def _apply_calibration(model, X: pd.DataFrame, y: pd.Series,
                        method: str = "sigmoid", cv: int = 5):
     """
     Wrap *model* in a thin CalibratedClassifierCV-compatible shim and refit it.
@@ -114,25 +114,25 @@ class AutoMLPipeline:
     def __init__(
         self,
         config: PipelineConfig,
-        gene_space_overrides: Optional[dict] = None,
+        gene_space_overrides: dict | None = None,
     ) -> None:
         self.config = config
         self._gene_space_overrides: dict = gene_space_overrides or {}
-        self._data_manager: Optional[DataManager] = None
-        self._best_preprocessor: Optional[PreprocessingPipeline] = None
-        self._best_model: Optional[BaseAutoML] = None
-        self._history: Optional[EvolutionHistory] = None
-        self._report_path: Optional[str] = None
-        self._final_score: Optional[float] = None
-        self._drift_detector: Optional[DriftDetector] = None
+        self._data_manager: DataManager | None = None
+        self._best_preprocessor: PreprocessingPipeline | None = None
+        self._best_model: BaseAutoML | None = None
+        self._history: EvolutionHistory | None = None
+        self._report_path: str | None = None
+        self._final_score: float | None = None
+        self._drift_detector: DriftDetector | None = None
         metric_override = getattr(config, "_metric_override", None)
         self._metric_name: str = metric_override or get_default_metric(config.problem_type)
 
     def fit(
         self,
         train_df: pd.DataFrame,
-        test_df: Optional[pd.DataFrame] = None,
-    ) -> "AutoMLPipeline":
+        test_df: pd.DataFrame | None = None,
+    ) -> AutoMLPipeline:
         """
         Run the full genetic AutoML pipeline.
 
@@ -280,9 +280,9 @@ class AutoMLPipeline:
 
     def detect_drift(
         self,
-        new_df: "pd.DataFrame",
-        target_column: Optional[str] = None,
-    ) -> "DriftReport":
+        new_df: pd.DataFrame,
+        target_column: str | None = None,
+    ) -> DriftReport:
         """
         Compare *new_df* against the reference (training) distribution.
 
@@ -321,10 +321,10 @@ class AutoMLPipeline:
 
     def partial_fit(
         self,
-        new_df: "pd.DataFrame",
+        new_df: pd.DataFrame,
         epochs: int = 1,
-        target_column: Optional[str] = None,
-    ) -> "AutoMLPipeline":
+        target_column: str | None = None,
+    ) -> AutoMLPipeline:
         """
         Update the fitted model on a new batch of labelled data.
 
@@ -377,13 +377,13 @@ class AutoMLPipeline:
         X = self._drop_target_if_present(df)
         return self._best_model.predict(self._best_preprocessor.transform(X))
 
-    def predict_proba(self, df: pd.DataFrame) -> Optional[np.ndarray]:
+    def predict_proba(self, df: pd.DataFrame) -> np.ndarray | None:
         """Preprocess and return class probabilities (classification only)."""
         self._check_fitted()
         X = self._drop_target_if_present(df)
         return self._best_model.predict_proba(self._best_preprocessor.transform(X))
 
-    def score(self, df: pd.DataFrame, metric: Optional[str] = None) -> float:
+    def score(self, df: pd.DataFrame, metric: str | None = None) -> float:
         """Preprocess and evaluate the final model on df."""
         self._check_fitted()
         X = self._data_manager.features(df)
@@ -391,23 +391,23 @@ class AutoMLPipeline:
         return self._best_model.score(self._best_preprocessor.transform(X), y, metric=metric)
 
     @property
-    def best_model(self) -> Optional[BaseAutoML]:
+    def best_model(self) -> BaseAutoML | None:
         return self._best_model
 
     @property
-    def best_preprocessor(self) -> Optional[PreprocessingPipeline]:
+    def best_preprocessor(self) -> PreprocessingPipeline | None:
         return self._best_preprocessor
 
     @property
-    def history(self) -> Optional[EvolutionHistory]:
+    def history(self) -> EvolutionHistory | None:
         return self._history
 
     @property
-    def report_path(self) -> Optional[str]:
+    def report_path(self) -> str | None:
         return self._report_path
 
     @property
-    def final_score(self) -> Optional[float]:
+    def final_score(self) -> float | None:
         return self._final_score
 
     @property
@@ -454,9 +454,9 @@ class AutoMLPipeline:
         self,
         cfg,
         best_chrom,
-        X_dev_pp: "pd.DataFrame",
-        y_dev_pp: "pd.Series",
-    ) -> "BaseAutoML":
+        X_dev_pp: pd.DataFrame,
+        y_dev_pp: pd.Series,
+    ) -> BaseAutoML:
         """
         Build and fit the final model after evolution.
 
@@ -613,7 +613,7 @@ class AutoMLPipeline:
         return os.path.abspath(path)
 
     @classmethod
-    def load(cls, path: str) -> "AutoMLPipeline":
+    def load(cls, path: str) -> AutoMLPipeline:
         """
         Reload a pipeline saved with save(). Ready for predict() immediately
         — no re-fitting required.

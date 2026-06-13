@@ -13,7 +13,6 @@ Fit/transform contract:
 
 from __future__ import annotations
 
-from typing import List, Optional, Set
 
 import numpy as np
 import pandas as pd
@@ -33,13 +32,13 @@ class CorrelationFilter:
         Correlation cutoff [0, 1]. None disables the step entirely.
     """
 
-    def __init__(self, threshold: Optional[float] = 0.95) -> None:
+    def __init__(self, threshold: float | None = 0.95) -> None:
         self.threshold = threshold
-        self._cols_to_drop: List[str] = []
-        self._feature_names_in: List[str] = []
+        self._cols_to_drop: list[str] = []
+        self._feature_names_in: list[str] = []
 
 
-    def fit(self, X: pd.DataFrame, y: pd.Series = None) -> "CorrelationFilter":
+    def fit(self, X: pd.DataFrame, y: pd.Series = None) -> CorrelationFilter:
         self._feature_names_in = list(X.columns)
         self._cols_to_drop = []
 
@@ -54,7 +53,7 @@ class CorrelationFilter:
         corr = num_X.corr().abs()
         upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
 
-        to_drop: Set[str] = set()
+        to_drop: set[str] = set()
         for col in upper.columns:
             if col in to_drop:
                 continue
@@ -83,5 +82,5 @@ class CorrelationFilter:
         return self.fit(X, y).transform(X)
 
     @property
-    def dropped_features(self) -> List[str]:
+    def dropped_features(self) -> list[str]:
         return list(self._cols_to_drop)

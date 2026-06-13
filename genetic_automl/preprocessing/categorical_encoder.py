@@ -15,7 +15,6 @@ Missing values are filled with '__MISSING__' before encoding.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -49,15 +48,15 @@ class CategoricalEncoder:
         self.handle_missing = handle_missing
         self.n_folds = n_folds
 
-        self._cat_cols: List[str] = []
+        self._cat_cols: list[str] = []
         self._encoder = None
-        self._target_map: Dict[str, Dict] = {}
+        self._target_map: dict[str, dict] = {}
         self._global_mean: float = 0.0
-        self._binary_cats: Dict[str, List] = {}
-        self._ohe_cols: List[str] = []
-        self._ordinal_fill: Dict[str, float] = {}
+        self._binary_cats: dict[str, list] = {}
+        self._ohe_cols: list[str] = []
+        self._ordinal_fill: dict[str, float] = {}
 
-    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "CategoricalEncoder":
+    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> CategoricalEncoder:
         # Pandas 3: "str" must be listed explicitly alongside "object" / "category"
         # to avoid a Pandas4Warning about implicit string inclusion.
         self._cat_cols = X.select_dtypes(include=["object", "category", "str"]).columns.tolist()
@@ -151,7 +150,7 @@ class CategoricalEncoder:
 
         return X
 
-    def fit_transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> pd.DataFrame:
+    def fit_transform(self, X: pd.DataFrame, y: pd.Series | None = None) -> pd.DataFrame:
         return self.fit(X, y).transform(X)
 
     def _fill_missing(self, X_cat: pd.DataFrame) -> pd.DataFrame:
@@ -161,7 +160,7 @@ class CategoricalEncoder:
         """Cross-validated target encoding — no leakage."""
         kf = KFold(n_splits=self.n_folds, shuffle=True, random_state=42)
         for col in self._cat_cols:
-            fold_means: Dict = {}
+            fold_means: dict = {}
             for train_idx, _ in kf.split(X_cat):
                 for cat, mean in y.iloc[train_idx].groupby(X_cat[col].iloc[train_idx].values).mean().items():
                     fold_means.setdefault(cat, []).append(mean)

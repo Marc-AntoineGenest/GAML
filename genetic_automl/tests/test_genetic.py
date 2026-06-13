@@ -1,4 +1,6 @@
 """Unit tests for genetic algorithm components."""
+from __future__ import annotations
+
 import random
 
 import numpy as np

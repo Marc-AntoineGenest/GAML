@@ -55,7 +55,6 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import asdict, dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -73,15 +72,15 @@ N_PSI_BINS = 10        # decile buckets for PSI
 
 
 
-@dataclass
+@dataclass(slots=True)
 class FeatureDriftResult:
     """Drift statistics for a single feature."""
     feature: str
     dtype: str                      # "continuous" or "categorical"
-    ks_statistic: Optional[float]   # KS test statistic (continuous only)
-    ks_pvalue: Optional[float]      # KS test p-value (continuous only)
-    chi2_statistic: Optional[float] # Chi-squared statistic (categorical only)
-    chi2_pvalue: Optional[float]    # Chi-squared p-value (categorical only)
+    ks_statistic: float | None   # KS test statistic (continuous only)
+    ks_pvalue: float | None      # KS test p-value (continuous only)
+    chi2_statistic: float | None # Chi-squared statistic (categorical only)
+    chi2_pvalue: float | None    # Chi-squared p-value (categorical only)
     psi: float                      # Population Stability Index
     drift_detected: bool            # True if any test flagged drift
     severity: str                   # "none" | "moderate" | "critical"
@@ -90,7 +89,7 @@ class FeatureDriftResult:
         return asdict(self)
 
 
-@dataclass
+@dataclass(slots=True)
 class DriftReport:
     """Drift detection results for all features."""
     n_features_checked: int
@@ -98,9 +97,9 @@ class DriftReport:
     any_drift: bool
     pvalue_threshold: float
     psi_threshold: float
-    feature_results: List[FeatureDriftResult] = field(default_factory=list)
-    missing_in_new: List[str] = field(default_factory=list)
-    new_columns: List[str] = field(default_factory=list)
+    feature_results: list[FeatureDriftResult] = field(default_factory=list)
+    missing_in_new: list[str] = field(default_factory=list)
+    new_columns: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         """Human-readable one-paragraph summary."""
@@ -139,11 +138,11 @@ class DriftReport:
         return json.dumps(self.to_dict(), indent=2)
 
     @property
-    def drifted_features(self) -> List[str]:
+    def drifted_features(self) -> list[str]:
         return [r.feature for r in self.feature_results if r.drift_detected]
 
     @property
-    def critical_features(self) -> List[str]:
+    def critical_features(self) -> list[str]:
         return [r.feature for r in self.feature_results if r.severity == "critical"]
 
 
@@ -173,12 +172,12 @@ class DriftDetector:
         self.pvalue_threshold = pvalue_threshold
         self.psi_threshold = psi_threshold
         self.n_psi_bins = n_psi_bins
-        self._reference: Optional[pd.DataFrame] = None
-        self._bin_edges: Dict[str, np.ndarray] = {}
-        self._cat_categories: Dict[str, np.ndarray] = {}
+        self._reference: pd.DataFrame | None = None
+        self._bin_edges: dict[str, np.ndarray] = {}
+        self._cat_categories: dict[str, np.ndarray] = {}
 
 
-    def fit(self, reference: pd.DataFrame) -> "DriftDetector":
+    def fit(self, reference: pd.DataFrame) -> DriftDetector:
         """
         Store the reference distribution.
 
@@ -246,7 +245,7 @@ class DriftDetector:
                 len(missing_in_new), missing_in_new,
             )
 
-        feature_results: List[FeatureDriftResult] = []
+        feature_results: list[FeatureDriftResult] = []
         cols_to_check = sorted(ref_cols & new_cols)
 
         for col in cols_to_check:
@@ -364,7 +363,7 @@ class DriftDetector:
 
 
 
-def _ks_test(ref: np.ndarray, new: np.ndarray) -> Tuple[float, float]:
+def _ks_test(ref: np.ndarray, new: np.ndarray) -> tuple[float, float]:
     """Two-sample KS test. Returns (statistic, p-value)."""
     try:
         from scipy.stats import ks_2samp
@@ -390,7 +389,7 @@ def _ks_statistic_numpy(ref: np.ndarray, new: np.ndarray) -> float:
 def _chi2_test(
     ref_counts: np.ndarray,
     new_counts: np.ndarray,
-) -> Tuple[Optional[float], Optional[float]]:
+) -> tuple[float | None, float | None]:
     """Chi-squared test on frequency counts. Returns (statistic, p-value)."""
     try:
         from scipy.stats import chi2_contingency
@@ -410,7 +409,7 @@ def _chi2_test(
 def _compute_psi(
     ref: np.ndarray,
     new: np.ndarray,
-    bin_edges: Optional[np.ndarray],
+    bin_edges: np.ndarray | None,
     n_bins: int = N_PSI_BINS,
 ) -> float:
     """
@@ -462,7 +461,7 @@ def _severity(
     psi: float,
     stat_drift: bool,
     pvalue_threshold: float,
-    pvalue: Optional[float],
+    pvalue: float | None,
 ) -> str:
     """
     Map PSI + statistical test result to a severity label.

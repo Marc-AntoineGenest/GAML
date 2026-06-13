@@ -39,7 +39,7 @@ import argparse
 import sys
 import textwrap
 from pathlib import Path
-from typing import List, Optional
+
 
 from genetic_automl import AutoMLPipeline, load_config
 from genetic_automl.config import (
@@ -583,7 +583,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """
     Main CLI entry point.
 

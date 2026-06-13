@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -47,7 +47,7 @@ class BaseAutoML(ABC):
 
         self._is_fitted: bool = False
         self._fit_duration: float = 0.0
-        self._feature_names: Optional[List[str]] = None
+        self._feature_names: list[str] | None = None
 
 
     @abstractmethod
@@ -55,9 +55,9 @@ class BaseAutoML(ABC):
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_val: Optional[pd.DataFrame] = None,
-        y_val: Optional[pd.Series] = None,
-    ) -> "BaseAutoML":
+        X_val: pd.DataFrame | None = None,
+        y_val: pd.Series | None = None,
+    ) -> BaseAutoML:
         """Train the model. Returns self for chaining."""
         ...
 
@@ -66,7 +66,7 @@ class BaseAutoML(ABC):
         """Return hard predictions (class labels or regression values)."""
         ...
 
-    def predict_proba(self, X: pd.DataFrame) -> Optional[np.ndarray]:
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray | None:
         """Return class probabilities. Returns None by default."""
         return None
 
@@ -75,7 +75,7 @@ class BaseAutoML(ABC):
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        metric: Optional[str] = None,
+        metric: str | None = None,
     ) -> float:
         """Evaluate on X / y using the given metric.
 
@@ -126,7 +126,7 @@ class BaseAutoML(ABC):
         self._fit_duration = time.perf_counter() - start
         return self._fit_duration
 
-    def get_params(self) -> Dict[str, Any]:
+    def get_params(self) -> dict[str, Any]:
         """Return hyper-parameters for logging / chromosome encoding."""
         return {
             "problem_type": self.problem_type.value,

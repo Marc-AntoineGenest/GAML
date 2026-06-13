@@ -10,12 +10,12 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from genetic_automl.core.problem import ProblemType
 
 
-@dataclass
+@dataclass(slots=True)
 class GeneticConfig:
     """Genetic algorithm settings."""
 
@@ -162,7 +162,7 @@ class GeneticConfig:
     """
 
     # Generation checkpointing
-    checkpoint_dir: Optional[str] = None
+    checkpoint_dir: str | None = None
     """
     Directory where generation checkpoints are saved.
     None (default) = checkpointing disabled.
@@ -177,7 +177,7 @@ class GeneticConfig:
     5 = save every 5 generations (lower I/O for long runs).
     """
 
-    resume_from_checkpoint: Optional[str] = None
+    resume_from_checkpoint: str | None = None
     """
     Path to a .joblib checkpoint file to resume from.
     When set, the engine restores the saved population and history, then
@@ -204,7 +204,7 @@ class GeneticConfig:
       [roc_auc, latency]          — discrimination vs. speed
     """
 
-    nsga2_objectives: Optional[List[str]] = None
+    nsga2_objectives: list[str] | None = None
     """
     List of objective names for NSGA-II.
     First entry = primary metric (used to select final model).
@@ -287,7 +287,7 @@ class GeneticConfig:
                       any dataset where rows have a meaningful time axis.
     """
 
-    group_column: Optional[str] = None
+    group_column: str | None = None
     """
     Name of the group column in the input DataFrame.
     Required when cv_strategy="group"; ignored otherwise.
@@ -298,7 +298,7 @@ class GeneticConfig:
     random_seed: int = 42
 
 
-@dataclass
+@dataclass(slots=True)
 class EnsembleConfig:
     """Ensemble settings for the final model (applied after the GA finishes)."""
 
@@ -322,7 +322,7 @@ class EnsembleConfig:
     """
 
 
-@dataclass
+@dataclass(slots=True)
 class OptunaConfig:
     """
     Optuna Bayesian HPO settings — applied after the GA finishes.
@@ -350,7 +350,7 @@ class OptunaConfig:
     Use 50–100 for production runs where wall-clock time allows.
     """
 
-    timeout: Optional[float] = None
+    timeout: float | None = None
     """
     Hard wall-clock limit in seconds for the entire Optuna study.
     None = no time limit (runs until n_trials are completed).
@@ -372,7 +372,7 @@ class OptunaConfig:
     """Log Optuna's per-trial output. Default False keeps the GAML log clean."""
 
 
-@dataclass
+@dataclass(slots=True)
 class CalibrationConfig:
     """
     Post-hoc probability calibration applied to the final classification model.
@@ -414,7 +414,7 @@ class CalibrationConfig:
     """
 
 
-@dataclass
+@dataclass(slots=True)
 class AutoMLConfig:
     """AutoML backend settings."""
 
@@ -436,11 +436,11 @@ class AutoMLConfig:
     calibration: CalibrationConfig = field(default_factory=CalibrationConfig)
     """Post-hoc probability calibration — applied to the final classification model."""
 
-    extra_kwargs: Dict[str, Any] = field(default_factory=dict)
+    extra_kwargs: dict[str, Any] = field(default_factory=dict)
     """Additional kwargs forwarded verbatim to the backend constructor."""
 
 
-@dataclass
+@dataclass(slots=True)
 class DataConfig:
     """Data split settings."""
 
@@ -468,14 +468,14 @@ class DataConfig:
     random_seed: int = 42
 
 
-@dataclass
+@dataclass(slots=True)
 class ReportConfig:
     """Reporting settings."""
 
     output_dir: str = "reports"
     """Directory where HTML reports and JSON run summaries are written."""
 
-    mlflow_tracking_uri: Optional[str] = "mlflow_runs"
+    mlflow_tracking_uri: str | None = "mlflow_runs"
     """Local MLflow tracking store directory. Set to None to disable MLflow."""
 
     open_html_on_finish: bool = False
@@ -513,7 +513,7 @@ class ReportConfig:
     """
 
 
-@dataclass
+@dataclass(slots=True)
 class PipelineConfig:
     """Top-level pipeline configuration."""
 
@@ -523,13 +523,13 @@ class PipelineConfig:
     target_column: str = "target"
     """Name of the target column in the input DataFrame."""
 
-    objectives: Optional[List[str]] = None
+    objectives: list[str] | None = None
     """For MULTI_OBJECTIVE: list of target column names."""
 
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     """Short unique identifier for this run (auto-generated)."""
 
-    run_name: Optional[str] = None
+    run_name: str | None = None
     """Human-readable run name shown in reports and MLflow. Auto-generated if None."""
 
     genetic: GeneticConfig = field(default_factory=GeneticConfig)

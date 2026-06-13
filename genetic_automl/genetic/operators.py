@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import copy
 import random
-from typing import List, Tuple
 
 from genetic_automl.genetic.chromosome import Chromosome, get_gene_space
 
 
 def tournament_selection(
-    population: List[Chromosome],
+    population: list[Chromosome],
     tournament_size: int,
     rng: random.Random,
 ) -> Chromosome:
@@ -30,9 +29,9 @@ def tournament_selection(
 
 
 def elites(
-    population: List[Chromosome],
+    population: list[Chromosome],
     elite_ratio: float,
-) -> List[Chromosome]:
+) -> list[Chromosome]:
     """Return the top elite_ratio fraction (at least 1 individual) unchanged."""
     n = max(1, int(len(population) * elite_ratio))
     sorted_pop = sorted(
@@ -47,7 +46,7 @@ def single_point_crossover(
     parent_a: Chromosome,
     parent_b: Chromosome,
     rng: random.Random,
-) -> Tuple[Chromosome, Chromosome]:
+) -> tuple[Chromosome, Chromosome]:
     """
     Split gene list at a random cut point and swap the tails between parents.
     """
@@ -75,7 +74,7 @@ def uniform_crossover(
     parent_a: Chromosome,
     parent_b: Chromosome,
     rng: random.Random,
-) -> Tuple[Chromosome, Chromosome]:
+) -> tuple[Chromosome, Chromosome]:
     """Each gene is independently drawn from either parent with p=0.5."""
     gene_names = list(parent_a.genes.keys())
     genes_a, genes_b = {}, {}

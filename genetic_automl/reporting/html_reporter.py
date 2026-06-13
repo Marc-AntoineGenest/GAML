@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from genetic_automl.config import PipelineConfig
 from genetic_automl.genetic.chromosome import Chromosome
@@ -34,13 +34,13 @@ class HTMLReporter:
         self,
         config: PipelineConfig,
         history: EvolutionHistory,
-        final_test_score: Optional[float] = None,
-        final_metric_name: Optional[str] = None,
-        preprocessing_summary: Optional[Dict[str, Any]] = None,
-        diversity_summary: Optional[Dict[str, Any]] = None,
-        shap_summary: Optional[Dict[str, Any]] = None,
-        pareto_front: Optional[List[dict]] = None,
-        extra_info: Optional[Dict[str, Any]] = None,
+        final_test_score: float | None = None,
+        final_metric_name: str | None = None,
+        preprocessing_summary: dict[str, Any] | None = None,
+        diversity_summary: dict[str, Any] | None = None,
+        shap_summary: dict[str, Any] | None = None,
+        pareto_front: list[dict] | None = None,
+        extra_info: dict[str, Any] | None = None,
         open_browser: bool = False,
     ) -> str:
         """Generate the HTML report and return its file path."""
@@ -75,13 +75,13 @@ class HTMLReporter:
         self,
         config: PipelineConfig,
         history: EvolutionHistory,
-        final_test_score: Optional[float],
-        final_metric_name: Optional[str],
-        preprocessing_summary: Dict[str, Any],
-        diversity_summary: Dict[str, Any],
-        shap_summary: Optional[Dict[str, Any]],
-        pareto_front: List[dict],
-        extra_info: Dict[str, Any],
+        final_test_score: float | None,
+        final_metric_name: str | None,
+        preprocessing_summary: dict[str, Any],
+        diversity_summary: dict[str, Any],
+        shap_summary: dict[str, Any] | None,
+        pareto_front: list[dict],
+        extra_info: dict[str, Any],
     ) -> str:
         best = history.best
         fitness_curve = json.dumps(history.fitness_curve())

@@ -18,7 +18,6 @@ Design principles:
 from __future__ import annotations
 
 import traceback
-from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -85,18 +84,18 @@ class FitnessEvaluator:
         problem_type: ProblemType,
         target_column: str,
         backend: str = "autogluon",
-        metric: Optional[str] = None,
+        metric: str | None = None,
         n_folds: int = 3,
-        multi_objective_metrics: Optional[List[str]] = None,
-        multi_objective_weights: Optional[List[float]] = None,
+        multi_objective_metrics: list[str] | None = None,
+        multi_objective_weights: list[float] | None = None,
         random_seed: int = 42,
         fitness_std_penalty: float = 0.5,
-        surrogate: Optional[SurrogateModel] = None,
+        surrogate: SurrogateModel | None = None,
         asha_enabled: bool = True,
         asha_min_folds_before_prune: int = 1,
         asha_prune_margin: float = 0.0,
         cv_strategy: str = "stratified",
-        group_column: Optional[str] = None,
+        group_column: str | None = None,
     ) -> None:
         self.problem_type = problem_type
         self.target_column = target_column
@@ -107,7 +106,7 @@ class FitnessEvaluator:
         self.multi_objective_weights = multi_objective_weights
         self.random_seed = random_seed
         self.fitness_std_penalty = fitness_std_penalty
-        self.surrogate: Optional[SurrogateModel] = surrogate
+        self.surrogate: SurrogateModel | None = surrogate
         self.asha_enabled = asha_enabled
         self.asha_min_folds_before_prune = asha_min_folds_before_prune
         self.asha_prune_margin = asha_prune_margin

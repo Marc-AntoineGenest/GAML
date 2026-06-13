@@ -21,7 +21,6 @@ of training samples were missing (avoids noise from near-zero missingness).
 
 from __future__ import annotations
 
-from typing import List
 
 import pandas as pd
 
@@ -48,10 +47,10 @@ class MissingIndicator:
     ) -> None:
         self.enabled = enabled
         self.min_missing_frac = min_missing_frac
-        self.indicator_columns: List[str] = []   # original cols that get indicators
+        self.indicator_columns: list[str] = []   # original cols that get indicators
 
 
-    def fit(self, X: pd.DataFrame) -> "MissingIndicator":
+    def fit(self, X: pd.DataFrame) -> MissingIndicator:
         """Fit on raw (pre-imputation) data to detect originally-missing columns."""
         self.indicator_columns = []
         if not self.enabled:
@@ -114,6 +113,6 @@ class MissingIndicator:
                 X[indicator_name] = 0
         return X
 
-    def fit_transform_raw(self, X_raw: pd.DataFrame) -> "MissingIndicator":
+    def fit_transform_raw(self, X_raw: pd.DataFrame) -> MissingIndicator:
         """Convenience: fit on raw data and return self."""
         return self.fit(X_raw)

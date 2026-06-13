@@ -21,7 +21,6 @@ When imbalanced-learn is not installed, 'smote', 'borderline_smote', and
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -55,11 +54,11 @@ class ImbalanceHandler:
         self.k_neighbors = k_neighbors
 
         self._resampler = None
-        self._class_weights: Optional[dict] = None
+        self._class_weights: dict | None = None
         self._effective_method = method  # may be changed to fallback
 
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> "ImbalanceHandler":
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> ImbalanceHandler:
         """Learn class distribution. For SMOTE methods, no fitting is needed."""
         if self.method == "none":
             return self
@@ -110,7 +109,7 @@ class ImbalanceHandler:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-    ) -> Tuple[pd.DataFrame, pd.Series]:
+    ) -> tuple[pd.DataFrame, pd.Series]:
         """
         Fit and apply resampling to TRAINING DATA ONLY.
 
@@ -137,7 +136,7 @@ class ImbalanceHandler:
 
         return X, y
 
-    def sample_weights(self, y: pd.Series) -> Optional[np.ndarray]:
+    def sample_weights(self, y: pd.Series) -> np.ndarray | None:
         """
         Return per-sample weights if method='class_weight', else None.
         Pass these to the model's fit() if supported.

@@ -56,7 +56,7 @@ Design notes
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -68,7 +68,7 @@ from genetic_automl.utils.logger import get_logger
 log = get_logger(__name__)
 
 # Mapping of model_type → (ClassificationClass, RegressionClass, default_kwargs)
-_INCREMENTAL_REGISTRY: Dict[str, dict] = {
+_INCREMENTAL_REGISTRY: dict[str, dict] = {
     "sgd": {
         "clf": "sklearn.linear_model.SGDClassifier",
         "reg": "sklearn.linear_model.SGDRegressor",
@@ -133,8 +133,8 @@ class IncrementalModel(BaseAutoML):
         self.model_kwargs = model_kwargs
 
         self._estimator = None
-        self._classes: Optional[np.ndarray] = None
-        self._feature_names: Optional[List[str]] = None
+        self._classes: np.ndarray | None = None
+        self._feature_names: list[str] | None = None
         self._n_batches_seen: int = 0
         self._fit_start: float = 0.0
         self._fit_duration: float = 0.0
@@ -144,10 +144,10 @@ class IncrementalModel(BaseAutoML):
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_val: Optional[pd.DataFrame] = None,
-        y_val: Optional[pd.Series] = None,
+        X_val: pd.DataFrame | None = None,
+        y_val: pd.Series | None = None,
         batch_size: int = 1024,
-    ) -> "IncrementalModel":
+    ) -> IncrementalModel:
         """
         Initial fit via minibatch partial_fit passes.
 
@@ -186,7 +186,7 @@ class IncrementalModel(BaseAutoML):
         X_new: pd.DataFrame,
         y_new: pd.Series,
         epochs: int = 1,
-    ) -> "IncrementalModel":
+    ) -> IncrementalModel:
         """
         Update the model on a new data batch without full retraining.
 
@@ -219,7 +219,7 @@ class IncrementalModel(BaseAutoML):
         self._check_fitted()
         return self._estimator.predict(X.values.astype(float))
 
-    def predict_proba(self, X: pd.DataFrame) -> Optional[np.ndarray]:
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray | None:
         self._check_fitted()
         if hasattr(self._estimator, "predict_proba"):
             return self._estimator.predict_proba(X.values.astype(float))
@@ -234,7 +234,7 @@ class IncrementalModel(BaseAutoML):
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        metric: Optional[str] = None,
+        metric: str | None = None,
     ) -> float:
         preds = self.predict(X)
         proba = self.predict_proba(X) if metric in ("roc_auc",) else None

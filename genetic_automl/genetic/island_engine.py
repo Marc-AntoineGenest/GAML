@@ -66,7 +66,6 @@ import copy
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Optional
 
 import pandas as pd
 
@@ -127,7 +126,7 @@ class IslandEngine:
         migration_interval: int = 3,
         migration_size: int = 2,
         n_island_jobs: int = 1,
-        gene_space_overrides: Optional[Dict[str, list]] = None,
+        gene_space_overrides: dict[str, list] | None = None,
     ) -> None:
         self.cfg = genetic_config
         self.backend = backend
@@ -147,7 +146,7 @@ class IslandEngine:
             migration_interval, migration_size, n_island_jobs,
         )
 
-        self._islands: List[GeneticEngine] = []
+        self._islands: list[GeneticEngine] = []
         for i in range(n_islands):
             island_cfg = copy.deepcopy(genetic_config)
             island_cfg.population_size = island_pop_size
@@ -271,7 +270,7 @@ class IslandEngine:
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-    ) -> List[List[Chromosome]]:
+    ) -> list[list[Chromosome]]:
         """Build generation-0 population for each island (warm-start aware)."""
         populations = []
         for i, engine in enumerate(self._islands):
@@ -357,7 +356,7 @@ class IslandEngine:
 
     def _step_islands_parallel(
         self,
-        island_states: List[dict],
+        island_states: list[dict],
         X_train: pd.DataFrame,
         y_train: pd.Series,
         gen_idx: int,
@@ -380,7 +379,7 @@ class IslandEngine:
                 if exc:
                     log.warning("Island %d step failed: %s", i, exc)
 
-    def _migrate(self, island_states: List[dict]) -> None:
+    def _migrate(self, island_states: list[dict]) -> None:
         """
         Ring-topology migration: copy top-k chromosomes from island i
         to island (i+1) % n_islands, replacing that island's worst members.
@@ -391,7 +390,7 @@ class IslandEngine:
         n = self.n_islands
         k = self.migration_size
 
-        emigrants: List[List[Chromosome]] = []
+        emigrants: list[list[Chromosome]] = []
         for state in island_states:
             pop = state["population"]
             evaluated = [c for c in pop if c.fitness is not None]

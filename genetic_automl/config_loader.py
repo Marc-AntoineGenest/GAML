@@ -16,7 +16,7 @@ Usage::
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from genetic_automl.config import (
     AutoMLConfig,
@@ -49,7 +49,7 @@ _MODEL_GENE_NAMES = {
 
 def load_config(
     path: str = "gaml_config.yaml",
-) -> Tuple[PipelineConfig, Dict[str, List[Any]]]:
+) -> tuple[PipelineConfig, dict[str, list[Any]]]:
     """
     Parse a GAML YAML config file and return a (PipelineConfig, gene_overrides) tuple.
 
@@ -87,8 +87,8 @@ def load_config(
             "or pass the correct path to load_config()."
         )
 
-    with open(path, "r", encoding="utf-8") as fh:
-        raw: Dict[str, Any] = yaml.safe_load(fh) or {}
+    with open(path, encoding="utf-8") as fh:
+        raw: dict[str, Any] = yaml.safe_load(fh) or {}
 
     log.info("Loading GAML config from '%s'", path)
 
@@ -97,8 +97,8 @@ def load_config(
     problem_type = _parse_problem_type(problem_type_str)
     target_column = str(run_cfg.get("target_column", "target"))
     backend = str(run_cfg.get("backend", "sklearn")).lower()
-    metric: Optional[str] = run_cfg.get("metric") or None
-    run_name: Optional[str] = run_cfg.get("name") or None
+    metric: str | None = run_cfg.get("metric") or None
+    run_name: str | None = run_cfg.get("name") or None
 
     data_cfg = raw.get("data", {})
     data = DataConfig(
@@ -211,10 +211,10 @@ def load_config(
     if metric:
         config._metric_override = metric
 
-    pp_raw: Dict[str, Any] = raw.get("preprocessing_search_space", {})
-    model_raw: Dict[str, Any] = raw.get(f"{backend}_search_space", {})
+    pp_raw: dict[str, Any] = raw.get("preprocessing_search_space", {})
+    model_raw: dict[str, Any] = raw.get(f"{backend}_search_space", {})
 
-    gene_overrides: Dict[str, List[Any]] = {}
+    gene_overrides: dict[str, list[Any]] = {}
 
     for name, values in pp_raw.items():
         if name not in _PREPROCESSING_GENE_NAMES:
@@ -251,14 +251,14 @@ def _parse_problem_type(value: str) -> ProblemType:
     return mapping[value]
 
 
-def _coerce_values(raw: Any) -> List[Any]:
+def _coerce_values(raw: Any) -> list[Any]:
     """Ensure value is a list and convert YAML null strings to Python None."""
     if not isinstance(raw, list):
         raw = [raw]
     return [None if v == "null" else v for v in raw]
 
 
-def _validate_gene_overrides(overrides: Dict[str, List[Any]]) -> None:
+def _validate_gene_overrides(overrides: dict[str, list[Any]]) -> None:
     for name, values in overrides.items():
         if not isinstance(values, list) or len(values) == 0:
             raise ValueError(

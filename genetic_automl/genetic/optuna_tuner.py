@@ -49,7 +49,7 @@ fully usable standalone::
 from __future__ import annotations
 
 import warnings
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -64,7 +64,7 @@ log = get_logger(__name__)
 # Each entry is (param_name, suggest_type, kwargs).
 # suggest_type: "float" | "int" | "categorical" | "log_float"
 
-_SEARCH_SPACES: Dict[str, list] = {
+_SEARCH_SPACES: dict[str, list] = {
     "lgbm": [
         ("n_estimators",      "int",        {"low": 100,  "high": 1000, "step": 50}),
         ("learning_rate",     "log_float",  {"low": 1e-3, "high": 0.3}),
@@ -143,7 +143,7 @@ class OptunaTuner:
     def __init__(
         self,
         n_trials: int = 30,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
         use_cv: bool = False,
         n_cv_folds: int = 3,
         verbose: bool = False,
@@ -165,7 +165,7 @@ class OptunaTuner:
         metric: str,
         backend: str = "sklearn",
         random_seed: int = 42,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Run Bayesian HPO around the best chromosome's model-gene values.
 

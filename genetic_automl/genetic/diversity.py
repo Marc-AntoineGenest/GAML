@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -38,7 +37,7 @@ from genetic_automl.utils.logger import get_logger
 log = get_logger(__name__)
 
 
-def _encode_population(population: List[Chromosome]) -> np.ndarray:
+def _encode_population(population: list[Chromosome]) -> np.ndarray:
     """
     Encode population as an (N, G) integer matrix for vectorised distance
     computation. Each gene value is mapped to a stable integer index based on
@@ -69,7 +68,7 @@ def hamming_distance(a: Chromosome, b: Chromosome) -> float:
     return sum(1 for k in keys if a.genes.get(k) != b.genes.get(k)) / len(keys)
 
 
-def mean_pairwise_hamming(population: List[Chromosome]) -> float:
+def mean_pairwise_hamming(population: list[Chromosome]) -> float:
     """
     Compute mean pairwise Hamming distance across the population.
 
@@ -87,7 +86,7 @@ def mean_pairwise_hamming(population: List[Chromosome]) -> float:
     return float(pairwise[i_upper, j_upper].mean())
 
 
-def _pairwise_matrix(population: List[Chromosome]) -> np.ndarray:
+def _pairwise_matrix(population: list[Chromosome]) -> np.ndarray:
     """Return the full (N, N) pairwise Hamming distance matrix."""
     matrix = _encode_population(population)
     diff = matrix[:, None, :] != matrix[None, :, :]
@@ -150,7 +149,7 @@ class PopulationDiversity:
 
         self._current_mutation_rate = base_mutation_rate
         self._boosted = False
-        self.history: List[DiversityStats] = []
+        self.history: list[DiversityStats] = []
 
     @property
     def current_mutation_rate(self) -> float:
@@ -158,10 +157,10 @@ class PopulationDiversity:
 
     def update(
         self,
-        population: List[Chromosome],
+        population: list[Chromosome],
         generation: int,
         no_improvement_streak: int,
-    ) -> Tuple[List[Chromosome], float]:
+    ) -> tuple[list[Chromosome], float]:
         """
         Assess diversity and apply counter-measures if needed.
         Called after fitness evaluation and before breeding.
@@ -229,7 +228,7 @@ class PopulationDiversity:
         )
         return population, self._current_mutation_rate
 
-    def _inject_diversity(self, population: List[Chromosome]) -> List[Chromosome]:
+    def _inject_diversity(self, population: list[Chromosome]) -> list[Chromosome]:
         """Replace the bottom injection_ratio fraction with fresh random individuals."""
         n_inject = max(1, int(len(population) * self.injection_ratio))
         sorted_pop = sorted(
@@ -247,7 +246,7 @@ class PopulationDiversity:
         )
         return survivors + fresh
 
-    def _min_hamming(self, population: List[Chromosome]) -> float:
+    def _min_hamming(self, population: list[Chromosome]) -> float:
         n = len(population)
         if n < 2:
             return 1.0
@@ -255,7 +254,7 @@ class PopulationDiversity:
         i_upper, j_upper = np.triu_indices(n, k=1)
         return float(pw[i_upper, j_upper].min())
 
-    def _max_hamming(self, population: List[Chromosome]) -> float:
+    def _max_hamming(self, population: list[Chromosome]) -> float:
         n = len(population)
         if n < 2:
             return 0.0

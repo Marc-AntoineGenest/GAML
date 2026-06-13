@@ -1,4 +1,6 @@
 """Integration tests for the full AutoML pipeline."""
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 import pytest

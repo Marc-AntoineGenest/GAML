@@ -24,7 +24,7 @@ All preprocessing is handled upstream by PreprocessingPipeline.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -60,7 +60,7 @@ class RandomForestModel(BaseAutoML):
         time_limit: int = 60,
         random_seed: int = 42,
         n_estimators: int = 200,
-        max_depth: Optional[int] = None,
+        max_depth: int | None = None,
         min_samples_leaf: int = 1,
         max_features: str = "sqrt",
         # Accept (and ignore) learning_rate so the gene schema stays uniform
@@ -93,9 +93,9 @@ class RandomForestModel(BaseAutoML):
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_val: Optional[pd.DataFrame] = None,
-        y_val: Optional[pd.Series] = None,
-    ) -> "RandomForestModel":
+        X_val: pd.DataFrame | None = None,
+        y_val: pd.Series | None = None,
+    ) -> RandomForestModel:
         # X_val / y_val accepted but ignored — RF has no native early stopping.
         log.info(
             "RandomForestModel fit | trees=%d | depth=%s | samples=%d | features=%d",
@@ -116,13 +116,13 @@ class RandomForestModel(BaseAutoML):
         self._check_fitted()
         return self._estimator.predict(X.values)
 
-    def predict_proba(self, X: pd.DataFrame) -> Optional[np.ndarray]:
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray | None:
         self._check_fitted()
         if self.problem_type == ProblemType.REGRESSION:
             return None
         return self._estimator.predict_proba(X.values)
 
-    def predict_with_std(self, X: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+    def predict_with_std(self, X: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
         """
         Return (mean_prediction, std_prediction) using per-tree disagreement.
 

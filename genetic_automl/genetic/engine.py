@@ -17,7 +17,6 @@ from __future__ import annotations
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 import pandas as pd
 from sklearn.utils.parallel import Parallel, delayed
@@ -65,7 +64,7 @@ log = get_logger(__name__)
 _NO_STAGNATION_LIMIT = 999_999
 
 
-@dataclass
+@dataclass(slots=True)
 class GenerationStats:
     generation: int
     best_fitness: float
@@ -76,33 +75,33 @@ class GenerationStats:
     mutation_rate: float = 0.2
     diversity_injected: bool = False
     mutation_boosted: bool = False
-    best_chromosome: Optional[Chromosome] = None
+    best_chromosome: Chromosome | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class EvolutionHistory:
-    generations: List[GenerationStats] = field(default_factory=list)
-    all_chromosomes: List[Chromosome] = field(default_factory=list)
-    pareto_front: List[dict] = field(default_factory=list)
+    generations: list[GenerationStats] = field(default_factory=list)
+    all_chromosomes: list[Chromosome] = field(default_factory=list)
+    pareto_front: list[dict] = field(default_factory=list)
     """Pareto-front summary populated when nsga2_enabled=True."""
 
     @property
-    def best(self) -> Optional[Chromosome]:
+    def best(self) -> Chromosome | None:
         evaluated = [c for c in self.all_chromosomes if c.fitness is not None]
         if not evaluated:
             return None
         return max(evaluated, key=lambda c: c.fitness)
 
-    def fitness_curve(self) -> List[float]:
+    def fitness_curve(self) -> list[float]:
         return [g.best_fitness for g in self.generations]
 
-    def diversity_curve(self) -> List[float]:
+    def diversity_curve(self) -> list[float]:
         return [g.mean_hamming for g in self.generations]
 
-    def mutation_rate_curve(self) -> List[float]:
+    def mutation_rate_curve(self) -> list[float]:
         return [g.mutation_rate for g in self.generations]
 
-    def top_chromosomes(self, k: int) -> List[Chromosome]:
+    def top_chromosomes(self, k: int) -> list[Chromosome]:
         """
         Return the top-k unique chromosomes by fitness (best first).
 
@@ -123,7 +122,7 @@ class EvolutionHistory:
         ranked = sorted(evaluated, key=lambda c: c.fitness, reverse=True)
 
         seen: set = set()
-        unique: List[Chromosome] = []
+        unique: list[Chromosome] = []
         for chrom in ranked:
             key = str(sorted(chrom.genes.items()))
             if key not in seen:
@@ -152,7 +151,7 @@ class GeneticEngine:
         genetic_config: GeneticConfig,
         evaluator: FitnessEvaluator,
         backend: str = "autogluon",
-        gene_space_overrides: Optional[Dict[str, list]] = None,
+        gene_space_overrides: dict[str, list] | None = None,
     ) -> None:
         self.cfg = genetic_config
         self.evaluator = evaluator
@@ -405,7 +404,7 @@ class GeneticEngine:
 
     def _evaluate_population(
         self,
-        population: List[Chromosome],
+        population: list[Chromosome],
         X_train: pd.DataFrame,
         y_train,
     ) -> None:
@@ -439,7 +438,7 @@ class GeneticEngine:
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-    ) -> List[Chromosome]:
+    ) -> list[Chromosome]:
         """Build generation 0 with warm-start or fall back to pure random."""
         if not self.cfg.warm_start:
             log.info("Warm-start disabled — using pure random population")
@@ -468,11 +467,11 @@ class GeneticEngine:
 
     def _breed(
         self,
-        population: List[Chromosome],
+        population: list[Chromosome],
         next_gen: int,
         mutation_rate: float,
-        objective_values: Optional[Dict] = None,
-    ) -> List[Chromosome]:
+        objective_values: dict | None = None,
+    ) -> list[Chromosome]:
         """
         Produce the next generation using selection, crossover, and mutation.
 
@@ -501,7 +500,7 @@ class GeneticEngine:
                 crowding_distance_assignment(front, objective_values, n_obj)
 
             # Generate offspring (same size as population)
-            offspring: List[Chromosome] = []
+            offspring: list[Chromosome] = []
             while len(offspring) < self.cfg.population_size:
                 if self._rng.random() < self.cfg.crossover_rate:
                     parent_a = nsga2_select(population, self._rng)
@@ -527,7 +526,7 @@ class GeneticEngine:
             return survived[: self.cfg.population_size]
 
         # Standard single-objective breeding
-        new_pop: List[Chromosome] = []
+        new_pop: list[Chromosome] = []
         elite_individuals = elites(population, self.cfg.elite_ratio)
         new_pop.extend(elite_individuals)
 

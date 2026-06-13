@@ -58,7 +58,6 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Dict, List, Optional, Tuple
 
 from genetic_automl.genetic.chromosome import Chromosome
 from genetic_automl.utils.logger import get_logger
@@ -73,7 +72,7 @@ _INF_CROWD     = float("inf")
 
 
 
-def dominates(a_obj: List[float], b_obj: List[float]) -> bool:
+def dominates(a_obj: list[float], b_obj: list[float]) -> bool:
     """
     Return True if solution *a* dominates solution *b*.
 
@@ -94,9 +93,9 @@ def dominates(a_obj: List[float], b_obj: List[float]) -> bool:
 
 
 def fast_non_dominated_sort(
-    population: List[Chromosome],
-    objective_values: Dict[str, List[float]],
-) -> List[List[Chromosome]]:
+    population: list[Chromosome],
+    objective_values: dict[str, list[float]],
+) -> list[list[Chromosome]]:
     """
     Partition *population* into Pareto fronts F0, F1, F2, …
 
@@ -134,7 +133,7 @@ def fast_non_dominated_sort(
                 dom_by[j].append(i)
                 dom_count[i] += 1
 
-    fronts: List[List[int]] = []
+    fronts: list[list[int]] = []
     current_front = [i for i in range(n) if dom_count[i] == 0]
     while current_front:
         fronts.append(current_front)
@@ -160,8 +159,8 @@ def fast_non_dominated_sort(
 
 
 def crowding_distance_assignment(
-    front: List[Chromosome],
-    objective_values: Dict[str, List[float]],
+    front: list[Chromosome],
+    objective_values: dict[str, list[float]],
     n_objectives: int,
 ) -> None:
     """
@@ -212,7 +211,7 @@ def crowding_distance_assignment(
 
 
 def nsga2_select(
-    population: List[Chromosome],
+    population: list[Chromosome],
     rng: random.Random,
 ) -> Chromosome:
     """
@@ -242,11 +241,11 @@ def nsga2_select(
 
 
 def nsga2_survive(
-    combined: List[Chromosome],
+    combined: list[Chromosome],
     n_survive: int,
-    objective_values: Dict[str, List[float]],
+    objective_values: dict[str, list[float]],
     n_objectives: int,
-) -> List[Chromosome]:
+) -> list[Chromosome]:
     """
     Select *n_survive* individuals from *combined* (parents + offspring) using
     NSGA-II environmental selection.
@@ -260,7 +259,7 @@ def nsga2_survive(
 
     fronts = fast_non_dominated_sort(evaluated, objective_values)
 
-    survivors: List[Chromosome] = []
+    survivors: list[Chromosome] = []
     for front in fronts:
         if len(survivors) + len(front) <= n_survive:
             crowding_distance_assignment(front, objective_values, n_objectives)
@@ -287,10 +286,10 @@ def nsga2_survive(
 
 
 def build_objective_values(
-    population: List[Chromosome],
-    objectives: List[str],
-    latency_map: Optional[Dict[str, float]] = None,
-) -> Dict[str, List[float]]:
+    population: list[Chromosome],
+    objectives: list[str],
+    latency_map: dict[str, float] | None = None,
+) -> dict[str, list[float]]:
     """
     Build the objective value matrix for NSGA-II.
 
@@ -314,7 +313,7 @@ def build_objective_values(
     """
     from genetic_automl.core.problem import fitness_sign
 
-    result: Dict[str, List[float]] = {}
+    result: dict[str, list[float]] = {}
 
     for chrom in population:
         if chrom.fitness is None:
@@ -355,9 +354,9 @@ def _metric_registered(metric: str) -> bool:
 
 
 def pareto_front_summary(
-    history_chromosomes: List[Chromosome],
-    objectives: List[str],
-) -> List[dict]:
+    history_chromosomes: list[Chromosome],
+    objectives: list[str],
+) -> list[dict]:
     """
     Extract the final Pareto front from the full history and return a
     JSON-serialisable list of dicts for the HTML report.

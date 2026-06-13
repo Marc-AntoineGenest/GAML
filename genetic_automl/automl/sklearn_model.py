@@ -6,7 +6,7 @@ All preprocessing is handled upstream by PreprocessingPipeline.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -62,9 +62,9 @@ class SklearnModel(BaseAutoML):
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_val: Optional[pd.DataFrame] = None,
-        y_val: Optional[pd.Series] = None,
-    ) -> "SklearnModel":
+        X_val: pd.DataFrame | None = None,
+        y_val: pd.Series | None = None,
+    ) -> SklearnModel:
         log.info(
             "SklearnModel fit | estimators=%d | depth=%d | samples=%d | features=%d",
             self.n_estimators, self.max_depth, len(y_train), X_train.shape[1],
@@ -81,7 +81,7 @@ class SklearnModel(BaseAutoML):
         self._check_fitted()
         return self._estimator.predict(X.values)
 
-    def predict_proba(self, X: pd.DataFrame) -> Optional[np.ndarray]:
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray | None:
         self._check_fitted()
         if self.problem_type == ProblemType.REGRESSION:
             return None

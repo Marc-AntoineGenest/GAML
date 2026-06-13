@@ -21,7 +21,7 @@ Generation 0 composition:
 from __future__ import annotations
 
 import random
-from typing import Any, Dict, List
+from typing import Any
 
 import pandas as pd
 
@@ -36,7 +36,7 @@ from genetic_automl.utils.logger import get_logger
 log = get_logger(__name__)
 
 
-def _sklearn_baseline(backend: str) -> Dict[str, Any]:
+def _sklearn_baseline(backend: str) -> dict[str, Any]:
     base = {
         "numeric_imputer": "median", "outlier_method": "none",
         "outlier_threshold": 1.5, "outlier_action": "clip",
@@ -53,7 +53,7 @@ def _sklearn_baseline(backend: str) -> Dict[str, Any]:
     return base
 
 
-def _robust_tabular(backend: str) -> Dict[str, Any]:
+def _robust_tabular(backend: str) -> dict[str, Any]:
     base = {
         "numeric_imputer": "median", "outlier_method": "iqr",
         "outlier_threshold": 1.5, "outlier_action": "clip",
@@ -70,7 +70,7 @@ def _robust_tabular(backend: str) -> Dict[str, Any]:
     return base
 
 
-def _tree_friendly(backend: str) -> Dict[str, Any]:
+def _tree_friendly(backend: str) -> dict[str, Any]:
     base = {
         "numeric_imputer": "median", "outlier_method": "none",
         "outlier_threshold": 1.5, "outlier_action": "clip",
@@ -129,9 +129,9 @@ class WarmStart:
         evaluator,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-    ) -> List[Chromosome]:
+    ) -> list[Chromosome]:
         """Build a warm-started initial population of population_size individuals."""
-        population: List[Chromosome] = []
+        population: list[Chromosome] = []
 
         seeds = self._build_default_seeds()
         population.extend(seeds[:self.n_default_seeds])
@@ -160,7 +160,7 @@ class WarmStart:
         )
         return population[:population_size]
 
-    def _build_default_seeds(self) -> List[Chromosome]:
+    def _build_default_seeds(self) -> list[Chromosome]:
         seeds = []
         gene_space = {g.name: g for g in get_gene_space(self.backend)}
         for factory in _DEFAULT_SEEDS[:self.n_default_seeds]:
@@ -178,7 +178,7 @@ class WarmStart:
         evaluator,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-    ) -> List[Chromosome]:
+    ) -> list[Chromosome]:
         """Evaluate n_pool random candidates with an 80/20 split; return top n_keep."""
         from sklearn.model_selection import train_test_split as _tts
 

@@ -4,7 +4,7 @@
 
 ## Turn raw tabular data into production-ready ML models with zero code.
 
-![Python Versions](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
+![Python Versions](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 [![GitHub license](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)  
 [![Continuous Integration](https://github.com/Marc-AntoineGenest/GAML/actions/workflows/ci.yml/badge.svg)](https://github.com/Marc-AntoineGenest/GAML/actions/workflows/ci.yml)
 

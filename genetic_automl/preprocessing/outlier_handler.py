@@ -18,7 +18,6 @@ flag : add a binary __outlier__ indicator column
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -54,14 +53,14 @@ class OutlierHandler:
         self.action = action
         self.contamination = contamination
 
-        self._num_cols: List[str] = []
-        self._bounds: Dict[str, Tuple[float, float]] = {}
-        self._means: Dict[str, float] = {}
-        self._stds: Dict[str, float] = {}
-        self._medians: Dict[str, float] = {}
+        self._num_cols: list[str] = []
+        self._bounds: dict[str, tuple[float, float]] = {}
+        self._means: dict[str, float] = {}
+        self._stds: dict[str, float] = {}
+        self._medians: dict[str, float] = {}
         self._iso_forest = None
 
-    def fit(self, X: pd.DataFrame, y: pd.Series = None) -> "OutlierHandler":
+    def fit(self, X: pd.DataFrame, y: pd.Series = None) -> OutlierHandler:
         self._num_cols = X.select_dtypes(include="number").columns.tolist()
         if self.method == "none" or not self._num_cols:
             return self

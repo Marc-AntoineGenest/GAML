@@ -21,7 +21,7 @@ ImbalanceHandler is never applied to val/test data.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -47,7 +47,7 @@ class PreprocessingConfig:
     outlier_method: str = "none"
     outlier_threshold: float = 1.5
     outlier_action: str = "clip"
-    correlation_threshold: Optional[float] = 0.95
+    correlation_threshold: float | None = 0.95
     categorical_encoder: str = "onehot"
     distribution_transform: str = "none"
     scaler: str = "standard"
@@ -59,7 +59,7 @@ class PreprocessingConfig:
     max_interaction_features: int = 8
 
     @classmethod
-    def from_genes(cls, genes: Dict[str, Any]) -> "PreprocessingConfig":
+    def from_genes(cls, genes: dict[str, Any]) -> PreprocessingConfig:
         """Build from a chromosome gene dict (keys may be a superset)."""
         fields = set(cls.__dataclass_fields__.keys())  # type: ignore
         return cls(**{k: v for k, v in genes.items() if k in fields})
@@ -118,7 +118,7 @@ class PreprocessingPipeline:
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-    ) -> Tuple[pd.DataFrame, pd.Series]:
+    ) -> tuple[pd.DataFrame, pd.Series]:
         """
         Fit all steps on training data and return (X_transformed, y_transformed).
         ImbalanceHandler resampling is only applied here — never on val/test.
@@ -171,7 +171,7 @@ class PreprocessingPipeline:
         """Return per-sample weights if imbalance_method='class_weight', else None."""
         return self._imbalance_handler.sample_weights(y)
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         return {
             "correlation_dropped": self._correlation_filter.dropped_features,
             "selected_features": self._feature_selector.selected_features,

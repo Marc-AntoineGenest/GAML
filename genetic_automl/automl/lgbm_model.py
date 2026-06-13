@@ -13,7 +13,7 @@ All preprocessing is handled upstream by PreprocessingPipeline.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -99,9 +99,9 @@ class LGBMModel(BaseAutoML):
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_val: Optional[pd.DataFrame] = None,
-        y_val: Optional[pd.Series] = None,
-    ) -> "LGBMModel":
+        X_val: pd.DataFrame | None = None,
+        y_val: pd.Series | None = None,
+    ) -> LGBMModel:
         log.info(
             "LGBMModel fit | n_estimators=%d | lr=%.3f | leaves=%d | "
             "samples=%d | features=%d | early_stopping=%s",
@@ -129,7 +129,7 @@ class LGBMModel(BaseAutoML):
         self._check_fitted()
         return self._estimator.predict(X.values)
 
-    def predict_proba(self, X: pd.DataFrame) -> Optional[np.ndarray]:
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray | None:
         self._check_fitted()
         if self.problem_type == ProblemType.REGRESSION:
             return None

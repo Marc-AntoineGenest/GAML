@@ -12,7 +12,7 @@ All preprocessing is handled upstream by PreprocessingPipeline.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -104,9 +104,9 @@ class XGBModel(BaseAutoML):
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_val: Optional[pd.DataFrame] = None,
-        y_val: Optional[pd.Series] = None,
-    ) -> "XGBModel":
+        X_val: pd.DataFrame | None = None,
+        y_val: pd.Series | None = None,
+    ) -> XGBModel:
         log.info(
             "XGBModel fit | n_estimators=%d | depth=%d | lr=%.3f | "
             "samples=%d | features=%d | early_stopping=%s",
@@ -138,7 +138,7 @@ class XGBModel(BaseAutoML):
         raw = self._estimator.predict(X.values)
         return self._decode_labels(raw)
 
-    def predict_proba(self, X: pd.DataFrame) -> Optional[np.ndarray]:
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray | None:
         self._check_fitted()
         if self.problem_type == ProblemType.REGRESSION:
             return None

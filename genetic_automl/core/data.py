@@ -23,7 +23,6 @@ the rest of the GAML stack is unaffected.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -74,9 +73,9 @@ class DataManager:
         self.stratify = stratify
         self.random_seed = random_seed
 
-        self._train: Optional[pd.DataFrame] = None
-        self._val: Optional[pd.DataFrame] = None
-        self._test: Optional[pd.DataFrame] = None
+        self._train: pd.DataFrame | None = None
+        self._val: pd.DataFrame | None = None
+        self._test: pd.DataFrame | None = None
 
 
     def load(
@@ -171,8 +170,8 @@ class DataManager:
     def three_way_split(
         self,
         df: pd.DataFrame,
-        test_df: Optional[pd.DataFrame] = None,
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        test_df: pd.DataFrame | None = None,
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
         Split into (train, val, test).
 
@@ -212,8 +211,8 @@ class DataManager:
     def split(
         self,
         df: pd.DataFrame,
-        test_df: Optional[pd.DataFrame] = None,
-    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        test_df: pd.DataFrame | None = None,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """2-way split alias. Returns (train, test). Val is carved from train."""
         train, _val, test = self.three_way_split(df, test_df)
         return train, test
@@ -249,7 +248,7 @@ class DataManager:
         df: pd.DataFrame,
         split_size: float,
         stratify_col,
-    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         return train_test_split(
             df,
             test_size=split_size,

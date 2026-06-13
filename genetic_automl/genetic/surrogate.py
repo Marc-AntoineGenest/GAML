@@ -37,7 +37,7 @@ surrogate_uncertainty_thr : float — skip only when std_pred < this value.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -92,8 +92,8 @@ class SurrogateModel:
         self.random_seed = random_seed
 
         self._surrogate = None          # fitted surrogate model (BaseAutoML)
-        self._gene_names: List[str] = []  # ordered gene names for encoding
-        self._gene_value_maps: Dict[str, Dict[Any, int]] = {}
+        self._gene_names: list[str] = []  # ordered gene names for encoding
+        self._gene_value_maps: dict[str, dict[Any, int]] = {}
         self._n_trained_on: int = 0     # how many samples last fit used
         self._skips: int = 0
         self._total_candidates: int = 0
@@ -105,7 +105,7 @@ class SurrogateModel:
         self,
         chromosome: Chromosome,
         population_median: float,
-    ) -> Tuple[bool, float]:
+    ) -> tuple[bool, float]:
         """
         Decide whether to skip full CV for this chromosome.
 
@@ -139,7 +139,7 @@ class SurrogateModel:
             )
         return skip, predicted_fitness
 
-    def update(self, evaluated_chromosomes: List[Chromosome]) -> None:
+    def update(self, evaluated_chromosomes: list[Chromosome]) -> None:
         """
         Retrain the surrogate on all chromosomes that have a fitness value.
 
@@ -219,7 +219,7 @@ class SurrogateModel:
     def _predict_with_uncertainty(
         self,
         X: np.ndarray,
-    ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """
         Return (mean_predictions, std_predictions).
         std is None for models that don't expose predict_with_std().
@@ -258,7 +258,7 @@ class SurrogateModel:
                     v: idx for idx, v in enumerate(gene.values)
                 }
 
-    def _encode(self, chromosomes: List[Chromosome]) -> np.ndarray:
+    def _encode(self, chromosomes: list[Chromosome]) -> np.ndarray:
         """
         Convert a list of chromosomes into a (n, n_genes) float matrix.
 

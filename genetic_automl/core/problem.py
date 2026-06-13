@@ -11,7 +11,7 @@ Fitness direction convention
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 from sklearn.metrics import (
@@ -36,7 +36,7 @@ class MetricDirection(str, Enum):
 
 
 
-_METRIC_REGISTRY: Dict[str, Tuple[Any, MetricDirection]] = {
+_METRIC_REGISTRY: dict[str, tuple[Any, MetricDirection]] = {
     # Classification
     "f1_macro": (
         lambda y, yp: f1_score(y, yp, average="macro", zero_division=0),
@@ -70,7 +70,7 @@ _METRIC_REGISTRY: Dict[str, Tuple[Any, MetricDirection]] = {
     "r2": (r2_score, MetricDirection.MAXIMIZE),
 }
 
-_DEFAULT_METRIC: Dict[ProblemType, str] = {
+_DEFAULT_METRIC: dict[ProblemType, str] = {
     ProblemType.CLASSIFICATION: "f1_macro",
     ProblemType.REGRESSION: "mse",
     ProblemType.MULTI_OBJECTIVE: "mse",  # overridden per objective
@@ -111,7 +111,7 @@ def fitness_sign(metric_name: str) -> int:
 
 
 
-def pareto_front(scores: List[List[float]]) -> List[int]:
+def pareto_front(scores: list[list[float]]) -> list[int]:
     """
     Return indices of non-dominated solutions.
     All scores are assumed to be in the *maximize* direction

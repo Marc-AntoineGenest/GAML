@@ -36,7 +36,7 @@ fully standalone::
 from __future__ import annotations
 
 import warnings
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -69,8 +69,8 @@ class SHAPExplainer:
         self,
         model: Any,
         X: pd.DataFrame,
-        feature_names: Optional[List[str]] = None,
-    ) -> Optional[Dict[str, Any]]:
+        feature_names: list[str] | None = None,
+    ) -> dict[str, Any] | None:
         """
         Run SHAP TreeExplainer on *model* using a sample of *X*.
 
@@ -215,8 +215,8 @@ class SHAPExplainer:
 
 
 def _build_shap_svg(
-    feature_names: List[str],
-    mean_abs_shap: List[float],
+    feature_names: list[str],
+    mean_abs_shap: list[float],
     max_features: int = _MAX_CHART_FEATURES,
     width: int = 700,
 ) -> str:

@@ -20,7 +20,7 @@ Design notes
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -48,10 +48,10 @@ class EnsembleModel(BaseAutoML):
 
     def __init__(
         self,
-        members: List[BaseAutoML],
+        members: list[BaseAutoML],
         problem_type: ProblemType,
         target_column: str,
-        weights: Optional[List[float]] = None,
+        weights: list[float] | None = None,
         **kwargs: Any,
     ) -> None:
         if not members:
@@ -68,9 +68,9 @@ class EnsembleModel(BaseAutoML):
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_val: Optional[pd.DataFrame] = None,
-        y_val: Optional[pd.Series] = None,
-    ) -> "EnsembleModel":
+        X_val: pd.DataFrame | None = None,
+        y_val: pd.Series | None = None,
+    ) -> EnsembleModel:
         """
         No-op: members were fitted before being passed to this class.
         Satisfies the BaseAutoML contract.
@@ -92,7 +92,7 @@ class EnsembleModel(BaseAutoML):
             return self._classes_from_proba(proba)
         return self._majority_vote(X)
 
-    def predict_proba(self, X: pd.DataFrame) -> Optional[np.ndarray]:
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray | None:
         """
         Return weighted average of per-member class probability matrices.
         Returns None if no member supports predict_proba.
@@ -189,7 +189,7 @@ class EnsembleModel(BaseAutoML):
         return indices
 
     @staticmethod
-    def _normalise_weights(weights: Optional[List[float]], n: int) -> List[float]:
+    def _normalise_weights(weights: list[float] | None, n: int) -> list[float]:
         if weights is None:
             return [1.0 / n] * n
         if len(weights) != n:

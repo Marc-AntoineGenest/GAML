@@ -21,7 +21,6 @@ Columns below the skew threshold are left untouched to avoid unnecessary distort
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -53,13 +52,13 @@ class DistributionTransform:
         self.method = method
         self.skew_threshold = skew_threshold
 
-        self._transformers: Dict[str, object] = {}  # col → fitted transformer
-        self._log1p_cols: List[str] = []            # for log1p: cols to transform
-        self._shifts: Dict[str, float] = {}         # for box-cox: shift to make positive
-        self._skewed_cols: List[str] = []           # cols that exceeded threshold
+        self._transformers: dict[str, object] = {}  # col → fitted transformer
+        self._log1p_cols: list[str] = []            # for log1p: cols to transform
+        self._shifts: dict[str, float] = {}         # for box-cox: shift to make positive
+        self._skewed_cols: list[str] = []           # cols that exceeded threshold
 
 
-    def fit(self, X: pd.DataFrame, y=None) -> "DistributionTransform":
+    def fit(self, X: pd.DataFrame, y=None) -> DistributionTransform:
         if self.method == "none":
             return self
 
@@ -139,5 +138,5 @@ class DistributionTransform:
         return self.fit(X, y).transform(X)
 
     @property
-    def transformed_columns(self) -> List[str]:
+    def transformed_columns(self) -> list[str]:
         return list(self._skewed_cols)

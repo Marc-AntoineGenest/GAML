@@ -17,7 +17,6 @@ keep_k controls retention:
 
 from __future__ import annotations
 
-from typing import List, Union
 
 import numpy as np
 import pandas as pd
@@ -45,7 +44,7 @@ class FeatureSelector:
     def __init__(
         self,
         method: str = "none",
-        keep_k: Union[float, int] = 0.75,
+        keep_k: float | int = 0.75,
         variance_threshold: float = 0.01,
         problem_type_str: str = "classification",
         random_seed: int = 42,
@@ -56,10 +55,10 @@ class FeatureSelector:
         self.problem_type_str = problem_type_str
         self.random_seed = random_seed
 
-        self._selected_cols: List[str] = []
+        self._selected_cols: list[str] = []
         self._selector = None
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> "FeatureSelector":
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> FeatureSelector:
         n_total = X.shape[1]
 
         if self.method == "none" or n_total == 0:
@@ -131,7 +130,7 @@ class FeatureSelector:
         return self.fit(X, y).transform(X)
 
     @property
-    def selected_features(self) -> List[str]:
+    def selected_features(self) -> list[str]:
         return list(self._selected_cols)
 
     def _resolve_k(self, n_total: int) -> int:

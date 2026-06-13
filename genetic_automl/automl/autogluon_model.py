@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -65,8 +65,8 @@ class AutoGluonModel(BaseAutoML):
         time_limit: int = 60,
         random_seed: int = 42,
         presets: str = "medium_quality",
-        ag_metric: Optional[str] = None,
-        model_dir: Optional[str] = None,
+        ag_metric: str | None = None,
+        model_dir: str | None = None,
         keep_model_dir: bool = True,
         **kwargs: Any,
     ) -> None:
@@ -76,16 +76,16 @@ class AutoGluonModel(BaseAutoML):
         self.model_dir = model_dir
         self.keep_model_dir = keep_model_dir
         self._predictor = None
-        self._tmp_dir: Optional[str] = None
+        self._tmp_dir: str | None = None
 
 
     def fit(
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        X_val: Optional[pd.DataFrame] = None,
-        y_val: Optional[pd.Series] = None,
-    ) -> "AutoGluonModel":
+        X_val: pd.DataFrame | None = None,
+        y_val: pd.Series | None = None,
+    ) -> AutoGluonModel:
         try:
             from autogluon.tabular import TabularPredictor
         except ImportError as e:
@@ -142,7 +142,7 @@ class AutoGluonModel(BaseAutoML):
         self._check_fitted()
         return self._predictor.predict(X).to_numpy()
 
-    def predict_proba(self, X: pd.DataFrame) -> Optional[np.ndarray]:
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray | None:
         self._check_fitted()
         if self.problem_type == ProblemType.REGRESSION:
             return None
@@ -156,7 +156,7 @@ class AutoGluonModel(BaseAutoML):
         base.update({"presets": self.presets, "backend": "autogluon"})
         return base
 
-    def leaderboard(self) -> Optional[pd.DataFrame]:
+    def leaderboard(self) -> pd.DataFrame | None:
         """Return the AutoGluon model leaderboard (if available)."""
         if self._predictor is None:
             return None

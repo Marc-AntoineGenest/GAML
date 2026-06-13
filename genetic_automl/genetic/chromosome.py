@@ -10,14 +10,14 @@ from __future__ import annotations
 import copy
 import random
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
 class GeneDefinition:
     """A single gene: its name and the list of allowed values."""
     name: str
-    values: List[Any]
+    values: list[Any]
 
     def random_value(self, rng: random.Random) -> Any:
         return rng.choice(self.values)
@@ -27,7 +27,7 @@ class GeneDefinition:
 # Applied in this order by PreprocessingPipeline:
 #   imputer → outlier → correlation → encoder → transform → scaler
 #   → missing indicator → feature selection → imbalance
-PREPROCESSING_GENES: List[GeneDefinition] = [
+PREPROCESSING_GENES: list[GeneDefinition] = [
     GeneDefinition("correlation_threshold", [None, 0.85, 0.90, 0.95]),
     GeneDefinition("numeric_imputer", ["mean", "median", "knn", "iterative", "constant"]),
     GeneDefinition("outlier_method", ["none", "iqr", "zscore", "isolation_forest"]),
@@ -44,7 +44,7 @@ PREPROCESSING_GENES: List[GeneDefinition] = [
     GeneDefinition("max_interaction_features", [4, 6, 8]),
 ]
 
-_MODEL_GENES: Dict[str, List[GeneDefinition]] = {
+_MODEL_GENES: dict[str, list[GeneDefinition]] = {
     "autogluon": [
         GeneDefinition("presets", [
             "medium_quality", "good_quality", "high_quality", "optimize_for_deployment",
@@ -62,13 +62,13 @@ _MODEL_GENES: Dict[str, List[GeneDefinition]] = {
     ],
 }
 
-_GENE_SPACES: Dict[str, List[GeneDefinition]] = {
+_GENE_SPACES: dict[str, list[GeneDefinition]] = {
     backend: PREPROCESSING_GENES + model_genes
     for backend, model_genes in _MODEL_GENES.items()
 }
 
 
-def get_gene_space(backend: str) -> List[GeneDefinition]:
+def get_gene_space(backend: str) -> list[GeneDefinition]:
     backend = backend.lower()
     if backend not in _GENE_SPACES:
         raise ValueError(
@@ -80,8 +80,8 @@ def get_gene_space(backend: str) -> List[GeneDefinition]:
 
 def build_gene_space_from_config(
     backend: str,
-    overrides: Dict[str, list],
-) -> List[GeneDefinition]:
+    overrides: dict[str, list],
+) -> list[GeneDefinition]:
     """
     Return a gene space with candidate values replaced by those in overrides.
 
@@ -131,16 +131,16 @@ class Chromosome:
         Unique 8-character hex identifier.
     """
 
-    genes: Dict[str, Any]
-    fitness: Optional[float] = None
-    fitness_std: Optional[float] = None
-    extra_scores: Optional[Dict[str, float]] = None
+    genes: dict[str, Any]
+    fitness: float | None = None
+    fitness_std: float | None = None
+    extra_scores: dict[str, float] | None = None
     """Secondary objective scores for NSGA-II (metric_name -> score)."""
     generation: int = 0
-    parent_ids: List[str] = field(default_factory=list)
+    parent_ids: list[str] = field(default_factory=list)
     id: str = field(default_factory=lambda: _random_id())
 
-    def copy(self) -> "Chromosome":
+    def copy(self) -> Chromosome:
         return Chromosome(
             genes=copy.deepcopy(self.genes),
             fitness=self.fitness,
@@ -150,7 +150,7 @@ class Chromosome:
             parent_ids=list(self.parent_ids),
         )
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "genes": self.genes,
@@ -171,8 +171,8 @@ def random_population(
     size: int,
     rng: random.Random,
     generation: int = 0,
-    gene_space: Optional[List[GeneDefinition]] = None,
-) -> List[Chromosome]:
+    gene_space: list[GeneDefinition] | None = None,
+) -> list[Chromosome]:
     """
     Generate size random chromosomes.
 

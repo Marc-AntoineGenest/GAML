@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from genetic_automl.genetic.engine import EvolutionHistory
 from genetic_automl.utils.logger import get_logger
@@ -30,7 +30,7 @@ class MLflowLogger:
         self.experiment_name = experiment_name
         self._client = None
         self._run = None
-        self._run_id: Optional[str] = None
+        self._run_id: str | None = None
         self._available = self._try_import()
 
 
@@ -52,13 +52,13 @@ class MLflowLogger:
             self._run_id = self._run.info.run_id
             log.info("MLflow run started: %s", self._run_id)
 
-    def log_params(self, params: Dict[str, Any]) -> None:
+    def log_params(self, params: dict[str, Any]) -> None:
         if self._available and self._run:
             self._mlflow.log_params(
                 {k: str(v) for k, v in params.items()}
             )
 
-    def log_metric(self, key: str, value: float, step: Optional[int] = None) -> None:
+    def log_metric(self, key: str, value: float, step: int | None = None) -> None:
         if self._available and self._run:
             kwargs = {} if step is None else {"step": step}
             self._mlflow.log_metric(key, value, **kwargs)

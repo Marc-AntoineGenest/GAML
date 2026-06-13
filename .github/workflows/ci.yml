@@ -12,14 +12,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint (pyupgrade + isort)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install lint tools
+        run: pip install pyupgrade isort
+      - name: pyupgrade — enforce Python 3.13+ syntax
+        run: find genetic_automl -name "*.py" | xargs pyupgrade --py313-plus
+      - name: isort — check import order
+        run: isort --check --profile black genetic_automl/
+
   test:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
 
     strategy:
-      fail-fast: false          # keep running other versions if one fails
+      fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - name: Checkout
@@ -31,10 +46,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      # -----------------------------------------------------------------------
-      # Install core + optional deps in one shot.
-      # autogluon is intentionally excluded (too heavy for CI).
-      # -----------------------------------------------------------------------
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -45,17 +56,15 @@ jobs:
       - name: Run tests with coverage
         run: |
           pytest genetic_automl/tests/ \
-            --ignore=genetic_automl/tests/test_pipeline.py \
             --ignore=genetic_automl/tests/test_extended.py \
-            --ignore=genetic_automl/tests/test_improvements.py \
             -v --tb=short \
             --cov=genetic_automl \
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml
 
       - name: Upload coverage report
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.13'
         uses: codecov/codecov-action@v4
         with:
           files: coverage.xml
-          fail_ci_if_error: false   # coverage upload failure never breaks the build
+          fail_ci_if_error: false
